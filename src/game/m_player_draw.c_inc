@@ -206,6 +206,12 @@ static void Player_actor_draw_Normal(ACTOR* actorx, GAME* game) {
         now_main_index == mPlayer_INDEX_DEMO_GETOFF_BOAT_STANDUP) {
         moving_in_boat = TRUE;
     }
+#ifdef TARGET_PC
+    /* The debug car rolls in bends; the driver rolls with it. */
+    if (now_main_index == mPlayer_INDEX_PC_DRIVE) {
+        moving_in_boat = TRUE;
+    }
+#endif
 
     if (moving_in_boat) {
         s16 boat_angle_z;

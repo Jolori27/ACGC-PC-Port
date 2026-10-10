@@ -1,16 +1,27 @@
 /* PC: seated in the F5 debug car (pc/src/pc_car.c).
  *
- * The car is drawn around the player; this state hops in, drives under
- * stick control at 250% of the vanilla sprint with a soft start, and hops
- * out on B. Collision and acre crossing work like walking. */
+ * The car is drawn around the player; this state jumps in and sits down
+ * with Kapp'n's boat animations, drives under stick control at 250% of the
+ * vanilla sprint with a soft start, and stands up and jumps out on B.
+ * Collision and acre crossing work like walking. The car's wheels, steering
+ * wheel, roll and pitch follow the driving; the engine and horn are PC
+ * synthesized sounds (pc_sfx.c). */
 
 #define aPCD_TOP_SPEED (7.5f * 2.5f)  /* 250% of the vanilla sprint */
-#define aPCD_HOP_FRAMES 24.0f        /* 60 fps frames for hopping in or out */
-#define aPCD_HOP_HEIGHT 22.0f
 #define aPCD_PLAYER_OFS_Y 200.0f     /* Player_actor_ct's draw offset */
 #define aPCD_PUSH_RADIUS 12.0f       /* how close the player gets to the parked car */
 #define aPCD_ENTER_DIST 18.0f        /* A works within this distance of the car body... */
 #define aPCD_ENTER_ANGLE DEG2SHORT_ANGLE2(60.0f) /* ...when facing it */
+/* Kapp'n's boat geometry, which the ride animations were made for: the
+ * jump in covers 56 units and lands 17 lower; the jump out covers 45 and
+ * lands 18 higher. The height is not taken from the animation (the ground
+ * is level here): the draw offset blends the difference away instead. */
+#define aPCD_JUMP_IN_DIST 56.0f
+#define aPCD_JUMP_IN_OFS_Y 1700.0f
+#define aPCD_JUMP_OUT_DIST 45.0f
+#define aPCD_JUMP_OUT_OFS_Y (-1760.0f)
+#define aPCD_EXIT_DIST (aPCD_JUMP_OUT_DIST + 1.5f) /* stand-up root motion covers the rest */
+#define aPCD_WHEEL_RADIUS 18.57f     /* world units */
 
 /* Player draw offset that puts the root on the car seat (player scale 0.01). */
 static f32 Player_actor_Pc_drive_seat_ofs_y(void) {
@@ -34,36 +45,97 @@ static void Player_actor_Pc_drive_set_anim(ACTOR* actorx, GAME* game, int anim, 
     Player_actor_InitAnimation_Base1(actorx, game, anim, anim1_idx, 1.0f, 1.0f, 0.5f, morph, part_table_idx);
 }
 
-static void Player_actor_Pc_drive_start_hop(ACTOR* actorx, GAME* game, int phase, const xyz_t* end_pos) {
+/* Play-once animation that stops on its last frame. */
+static void Player_actor_Pc_drive_set_anim_once(ACTOR* actorx, GAME* game, int anim, f32 morph) {
+    int anim1_idx;
+    int part_table_idx;
+
+    Player_actor_SetupItem_Base1(actorx, anim, morph, &anim1_idx, &part_table_idx);
+    Player_actor_InitAnimation_Base2(actorx, game, anim, anim1_idx, 1.0f, 1.0f, 0.5f, morph, cKF_FRAMECONTROL_STOP,
+                                     part_table_idx);
+}
+
+static void Player_actor_Pc_drive_sfx_off(void) {
+    pc_sfx_car_engine(FALSE, 0.0f);
+    pc_sfx_car_horn(FALSE);
+    pc_sfx_car_skid(0.0f);
+}
+
+/* Jump in as onto the boat: the animation carries the player
+ * aPCD_JUMP_IN_DIST forward along the car's left (+X) direction with a
+ * quarter turn to the right built in, so they land facing forward, and
+ * drops them aPCD_JUMP_IN_DROP. From the right side that is a straight
+ * sideways hop; from the left the slack blends across during the jump. */
+static void Player_actor_Pc_drive_start_geton(ACTOR* actorx, GAME* game) {
+    PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
+    mPlayer_main_pc_drive_c* drive_p = &player->main_data.pc_drive;
+    cKF_SkeletonInfo_R_c* kf0_p = &player->keyframe0;
+    s16 side = g_pc_car.angle + DEG2SHORT_ANGLE2(90.0f);
+    xyz_t goal = g_pc_car.pos;
+    int anim1_idx;
+    int part_table_idx;
+
+    goal.x -= aPCD_JUMP_IN_DIST * sin_s(side);
+    goal.z -= aPCD_JUMP_IN_DIST * cos_s(side);
+    goal.y = actorx->world.position.y;
+
+    drive_p->phase = mPlayer_PC_DRIVE_PHASE_GETON;
+    drive_p->ofs_y_from = aPCD_PLAYER_OFS_Y;
+    drive_p->ofs_y_to = aPCD_PLAYER_OFS_Y + aPCD_JUMP_IN_OFS_Y;
+    Player_actor_SetupItem_Base1(actorx, mPlayer_ANIM_RIDE1, -5.0f, &anim1_idx, &part_table_idx);
+    actorx->world.angle.y = side;
+    cKF_SkeletonInfo_R_Animation_Set_base_shape_trs(kf0_p, 0.0f, 1000.0f, 0.0f, 0, 0, DEG2SHORT_ANGLE2(90.0f));
+    cKF_SkeletonInfo_R_AnimationMove_ct_base(&actorx->world.position, &goal, actorx->shape_info.rotation.y, side,
+                                             5.0f, kf0_p, cKF_ANIMATION_TRANS_XZ | cKF_ANIMATION_ROT_Y);
+    Player_actor_InitAnimation_Base2(actorx, game, mPlayer_ANIM_RIDE1, anim1_idx, 1.0f, 1.0f, 0.5f, -5.0f,
+                                     cKF_FRAMECONTROL_STOP, part_table_idx);
+    actorx->shape_info.ofs_y = aPCD_PLAYER_OFS_Y;
+}
+
+static void Player_actor_Pc_drive_start_sitdown(ACTOR* actorx, GAME* game) {
     PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
     mPlayer_main_pc_drive_c* drive_p = &player->main_data.pc_drive;
 
-    drive_p->phase = phase;
+    drive_p->phase = mPlayer_PC_DRIVE_PHASE_SITDOWN;
+    drive_p->ofs_y_from = aPCD_PLAYER_OFS_Y;
+    drive_p->ofs_y_to = Player_actor_Pc_drive_seat_ofs_y();
+    actorx->shape_info.rotation.y = g_pc_car.angle;
+    actorx->world.angle.y = g_pc_car.angle;
+    Player_actor_Pc_drive_set_anim_once(actorx, game, mPlayer_ANIM_RIDE2, -5.0f);
+}
+
+static void Player_actor_Pc_drive_start_drive(ACTOR* actorx, GAME* game) {
+    PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
+    mPlayer_main_pc_drive_c* drive_p = &player->main_data.pc_drive;
+
+    drive_p->phase = mPlayer_PC_DRIVE_PHASE_DRIVE;
     drive_p->timer = 0.0f;
-    drive_p->duration = aPCD_HOP_FRAMES;
-    drive_p->start_pos = actorx->world.position;
-    drive_p->end_pos = *end_pos;
-    actorx->speed = 0.0f;
-    /* Long morph: the pose turns into sitting (or standing) mid-air. */
-    Player_actor_Pc_drive_set_anim(actorx, game, phase == mPlayer_PC_DRIVE_PHASE_GETON ? mPlayer_ANIM_RIDEWAIT
-                                                                                       : mPlayer_ANIM_WAIT1,
-                                   -12.0f);
-    Player_actor_sound_JUMP(actorx);
+    actorx->shape_info.ofs_y = Player_actor_Pc_drive_seat_ofs_y();
+    Player_actor_Pc_drive_set_anim(actorx, game, mPlayer_ANIM_RIDEWAIT, -5.0f);
 }
 
 static void Player_actor_setup_main_Pc_drive(ACTOR* actorx, GAME* game) {
     PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
-    mPlayer_main_pc_drive_c* drive_p = &player->main_data.pc_drive;
 
+    player->boat_angleZ = 0;
     if (g_pc_car.driving) {
         /* Back from an acre wade (borderless acres off): already seated. */
-        drive_p->phase = mPlayer_PC_DRIVE_PHASE_DRIVE;
-        drive_p->timer = 0.0f;
-        Player_actor_Pc_drive_set_anim(actorx, game, mPlayer_ANIM_RIDEWAIT, -5.0f);
-        actorx->shape_info.ofs_y = Player_actor_Pc_drive_seat_ofs_y();
+        Player_actor_Pc_drive_start_drive(actorx, game);
     } else {
         g_pc_car.driving = TRUE;
-        Player_actor_Pc_drive_start_hop(actorx, game, mPlayer_PC_DRIVE_PHASE_GETON, &g_pc_car.pos);
+        g_pc_car.wheel = 0;
+        g_pc_car.steer = 0;
+        g_pc_car.roll = 0;
+        g_pc_car.pitch = 0;
+        g_pc_car.bob = 0.0f;
+        if (g_pc_car.seated) {
+            /* The car popped around the player: just sit down. */
+            g_pc_car.seated = FALSE;
+            actorx->world.position = g_pc_car.pos;
+            Player_actor_Pc_drive_start_sitdown(actorx, game);
+        } else {
+            Player_actor_Pc_drive_start_geton(actorx, game);
+        }
     }
 
     Player_actor_setup_main_Base(actorx, game);
@@ -72,17 +144,29 @@ static void Player_actor_setup_main_Pc_drive(ACTOR* actorx, GAME* game) {
 static void Player_actor_settle_main_Pc_drive(ACTOR* actorx, GAME* game) {
     PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
 
+    /* Clears any root motion still attached to the skeleton. */
+    cKF_SkeletonInfo_R_AnimationMove_dt(&player->keyframe0);
+    player->boat_angleZ = 0;
+
     /* A wade across an acre border keeps the player in the car. */
     if (player->requested_main_index != mPlayer_INDEX_WADE) {
         g_pc_car.driving = FALSE;
         /* Talk, events or a boxed-in exit leave the player standing in the
          * car: let them walk out rather than shoving them through a wall. */
         g_pc_car.ghost = TRUE;
+        g_pc_car.roll = 0;
+        g_pc_car.pitch = 0;
+        g_pc_car.bob = 0.0f;
         actorx->shape_info.ofs_y = aPCD_PLAYER_OFS_Y;
+        actorx->shape_info.shadow_size_change_rate = 1.0f;
+        actorx->shape_info.shadow_alpha_change_rate = 1.0f;
         /* Leaving at speed (F5, an event) must not slide the player on foot. */
         actorx->speed = 0.0f;
         actorx->position_speed.x = 0.0f;
         actorx->position_speed.z = 0.0f;
+        Player_actor_Pc_drive_sfx_off();
+    } else {
+        pc_sfx_car_engine(TRUE, 0.0f);
     }
 }
 
@@ -103,48 +187,103 @@ static int Player_actor_Pc_drive_same_acre(const xyz_t* a, const xyz_t* b) {
     return ax == bx && az == bz;
 }
 
-/* Arc from start to end; returns TRUE when landed. */
-static int Player_actor_Movement_Pc_drive_hop(ACTOR* actorx, f32 ofs_from, f32 ofs_to, s16 angle_to) {
+/* Root motion of the jump animations moves the actor. */
+static void Player_actor_Movement_Pc_drive_anim(ACTOR* actorx) {
+    PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
+
+    cKF_SkeletonInfo_R_AnimationMove_base(&actorx->world.position, &actorx->shape_info.rotation.y, &actorx->scale,
+                                          actorx->world.angle.y, &player->keyframe0);
+    Player_actor_Movement_Base_Stop(actorx, FALSE);
+}
+
+/* Draw offset blended along the current play-once animation. */
+static void Player_actor_Pc_drive_blend_ofs_y(ACTOR* actorx) {
     PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
     mPlayer_main_pc_drive_c* drive_p = &player->main_data.pc_drive;
-    f32 t;
-    f32 ease;
+    cKF_FrameControl_c* fc = &player->keyframe0.frame_control;
+    f32 t = fc->end_frame > 1.0f ? (fc->current_frame - 1.0f) / (fc->end_frame - 1.0f) : 1.0f;
 
-    drive_p->timer += gamePT->graph->dt_num_60fps_frames;
-    t = drive_p->timer / drive_p->duration;
-    if (t > 1.0f) {
-        t = 1.0f;
-    }
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    actorx->shape_info.ofs_y = drive_p->ofs_y_from + (drive_p->ofs_y_to - drive_p->ofs_y_from) * t;
+}
 
-    ease = t * t * (3.0f - 2.0f * t);
-    actorx->world.position.x = drive_p->start_pos.x + (drive_p->end_pos.x - drive_p->start_pos.x) * ease;
-    actorx->world.position.z = drive_p->start_pos.z + (drive_p->end_pos.z - drive_p->start_pos.z) * ease;
-    actorx->world.position.y = drive_p->start_pos.y + (drive_p->end_pos.y - drive_p->start_pos.y) * t +
-                               aPCD_HOP_HEIGHT * sin_s((s16)(t * 32768.0f));
-    actorx->shape_info.ofs_y = ofs_from + (ofs_to - ofs_from) * ease;
+/* Stand up, turning toward the way out, then jump out there. */
+static void Player_actor_Pc_drive_start_standup(ACTOR* actorx, GAME* game, const xyz_t* exit_pos) {
+    PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
+    mPlayer_main_pc_drive_c* drive_p = &player->main_data.pc_drive;
+    cKF_SkeletonInfo_R_c* kf0_p = &player->keyframe0;
+    f32 dx = exit_pos->x - actorx->world.position.x;
+    f32 dz = exit_pos->z - actorx->world.position.z;
+    int anim1_idx;
+    int part_table_idx;
 
-    add_calc_short_angle2(&actorx->shape_info.rotation.y, angle_to, CALC_EASE(0.3f), 0x1800, 0x80);
-    actorx->world.angle.y = actorx->shape_info.rotation.y;
+    drive_p->phase = mPlayer_PC_DRIVE_PHASE_STANDUP;
+    drive_p->exit_pos = *exit_pos;
+    drive_p->exit_angle = (dx != 0.0f || dz != 0.0f) ? atans_table(dz, dx) : g_pc_car.angle;
+    drive_p->ofs_y_from = Player_actor_Pc_drive_seat_ofs_y();
+    drive_p->ofs_y_to = aPCD_PLAYER_OFS_Y;
     actorx->speed = 0.0f;
-    actorx->position_speed.x = 0.0f;
-    actorx->position_speed.y = 0.0f;
-    actorx->position_speed.z = 0.0f;
+    Player_actor_Pc_drive_sfx_off();
 
-    return t >= 1.0f;
+    Player_actor_SetupItem_Base1(actorx, mPlayer_ANIM_GETOFF1, -18.0f, &anim1_idx, &part_table_idx);
+    cKF_SkeletonInfo_R_Animation_Set_base_shape_trs(kf0_p, 0.0f, 1000.0f, 0.0f, 0, 0, DEG2SHORT_ANGLE2(90.0f));
+    cKF_SkeletonInfo_R_AnimationMove_ct_base(&actorx->world.position, NULL, actorx->shape_info.rotation.y,
+                                             drive_p->exit_angle, 18.0f, kf0_p,
+                                             cKF_ANIMATION_TRANS_XZ | cKF_ANIMATION_ROT_Y);
+    actorx->world.angle.y = drive_p->exit_angle;
+    Player_actor_InitAnimation_Base2(actorx, game, mPlayer_ANIM_GETOFF1, anim1_idx, 1.0f, 1.0f, 0.5f, -18.0f,
+                                     cKF_FRAMECONTROL_STOP, part_table_idx);
+}
+
+static void Player_actor_Pc_drive_start_getoff(ACTOR* actorx, GAME* game) {
+    PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
+    mPlayer_main_pc_drive_c* drive_p = &player->main_data.pc_drive;
+    cKF_SkeletonInfo_R_c* kf0_p = &player->keyframe0;
+    s16 dir = drive_p->exit_angle;
+    xyz_t from = drive_p->exit_pos;
+    int anim1_idx;
+    int part_table_idx;
+
+    /* Where the jump animation has to start from to land on exit_pos. */
+    from.x -= aPCD_JUMP_OUT_DIST * sin_s(dir);
+    from.z -= aPCD_JUMP_OUT_DIST * cos_s(dir);
+    from.y = actorx->world.position.y;
+
+    drive_p->phase = mPlayer_PC_DRIVE_PHASE_GETOFF;
+    drive_p->ofs_y_from = aPCD_PLAYER_OFS_Y;
+    drive_p->ofs_y_to = aPCD_PLAYER_OFS_Y + aPCD_JUMP_OUT_OFS_Y;
+    actorx->shape_info.ofs_y = aPCD_PLAYER_OFS_Y;
+    Player_actor_SetupItem_Base1(actorx, mPlayer_ANIM_GETOFF2, -5.0f, &anim1_idx, &part_table_idx);
+    cKF_SkeletonInfo_R_Animation_Set_base_shape_trs(kf0_p, 0.0f, 1000.0f, 0.0f, 0, 0, DEG2SHORT_ANGLE2(90.0f));
+    cKF_SkeletonInfo_R_AnimationMove_ct_base(&actorx->world.position, &from, actorx->shape_info.rotation.y, dir,
+                                             5.0f, kf0_p, cKF_ANIMATION_TRANS_XZ | cKF_ANIMATION_ROT_Y);
+    actorx->world.angle.y = dir;
+    Player_actor_InitAnimation_Base2(actorx, game, mPlayer_ANIM_GETOFF2, anim1_idx, 1.0f, 1.0f, 0.5f, -5.0f,
+                                     cKF_FRAMECONTROL_STOP, part_table_idx);
+    Player_actor_sound_JUMP(actorx);
 }
 
 static void Player_actor_Movement_Pc_drive(ACTOR* actorx, GAME* game) {
+    PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
     f32 dt = gamePT->graph->dt_num_60fps_frames;
     f32 stick = Player_actor_GetController_move_percentR();
     s16 heading = actorx->world.angle.y;
     f32 speed = actorx->speed;
+    f32 old_speed = speed;
     f32 target = 0.0f;
     f32 over_norm;
+    int turn = 0;
+    int want_turn = 0;
+    s16 steer_target = 0;
+    s16 roll_target;
+    s16 pitch_target;
+    f32 revs;
+    f32 skid = 0.0f;
 
     if (stick > 0.0f) {
         s16 want = Player_actor_Get_ControllerAngle(game);
         f32 grip = speed / (aPCD_TOP_SPEED * 0.5f);
-        int max_turn;
         int diff;
         f32 align;
 
@@ -152,13 +291,19 @@ static void Player_actor_Movement_Pc_drive(ACTOR* actorx, GAME* game) {
         if (grip > 1.0f) {
             grip = 1.0f;
         }
-        max_turn = (int)((300.0f + 500.0f * grip) * dt);
+        int max_turn = (int)((300.0f + 500.0f * grip) * dt);
+
+        if (max_turn < 1) {
+            max_turn = 1;
+        }
         diff = (s16)(want - heading);
+        want_turn = diff;
         if (diff > max_turn) {
             diff = max_turn;
         } else if (diff < -max_turn) {
             diff = -max_turn;
         }
+        turn = diff;
         heading += (s16)diff;
 
         /* Full throttle when facing the stick; a slow arc for U-turns. */
@@ -167,6 +312,15 @@ static void Player_actor_Movement_Pc_drive(ACTOR* actorx, GAME* game) {
             align = 0.25f;
         }
         target = aPCD_TOP_SPEED * stick * align;
+
+        /* Steering wheel follows where the stick points, up to a lock. */
+        steer_target = (s16)(want - heading);
+        if (steer_target > DEG2SHORT_ANGLE2(60.0f)) {
+            steer_target = DEG2SHORT_ANGLE2(60.0f);
+        } else if (steer_target < DEG2SHORT_ANGLE2(-60.0f)) {
+            steer_target = DEG2SHORT_ANGLE2(-60.0f);
+        }
+        steer_target = (s16)(steer_target * 2);
     }
 
     over_norm = Player_actor_Culc_over_speed_normalize_NoneZero(actorx, &actorx->world.position);
@@ -194,6 +348,48 @@ static void Player_actor_Movement_Pc_drive(ACTOR* actorx, GAME* game) {
     actorx->shape_info.rotation.y = heading;
     actorx->speed = speed;
     Player_actor_Movement_Base(actorx);
+
+    /* ---- body and wheels ---- */
+
+    /* Leans out of the bend, the harder the faster. */
+    roll_target = (s16)(-(f32)turn * speed * 0.9f);
+    if (roll_target > DEG2SHORT_ANGLE2(5.0f)) {
+        roll_target = DEG2SHORT_ANGLE2(5.0f);
+    } else if (roll_target < DEG2SHORT_ANGLE2(-5.0f)) {
+        roll_target = DEG2SHORT_ANGLE2(-5.0f);
+    }
+    /* Nose up pulling away, nose down braking. */
+    pitch_target = (s16)((speed - old_speed) * (dt > 0.0f ? 1.0f / dt : 1.0f) * -1400.0f);
+    if (pitch_target > DEG2SHORT_ANGLE2(3.0f)) {
+        pitch_target = DEG2SHORT_ANGLE2(3.0f);
+    } else if (pitch_target < DEG2SHORT_ANGLE2(-3.0f)) {
+        pitch_target = DEG2SHORT_ANGLE2(-3.0f);
+    }
+    add_calc_short_angle2(&g_pc_car.roll, roll_target, CALC_EASE(0.12f * dt), 0x400, 0x10);
+    add_calc_short_angle2(&g_pc_car.pitch, pitch_target, CALC_EASE(0.10f * dt), 0x400, 0x10);
+    add_calc_short_angle2(&g_pc_car.steer, steer_target, CALC_EASE(0.25f * dt), 0x1000, 0x20);
+    g_pc_car.wheel += (s16)(speed * dt / aPCD_WHEEL_RADIUS * (32768.0f / 3.14159265f));
+    /* Engine shake, stronger at idle. */
+    g_pc_car.bob = (0.18f - 0.12f * speed / aPCD_TOP_SPEED) * sin_s((s16)(player->player_frame_counter * 6500));
+    actorx->shape_info.ofs_y = Player_actor_Pc_drive_seat_ofs_y() + g_pc_car.bob * 100.0f;
+    player->boat_angleZ = g_pc_car.roll;
+
+    /* ---- sounds ---- */
+    revs = speed / aPCD_TOP_SPEED;
+    pc_sfx_car_engine(TRUE, revs);
+    pc_sfx_car_horn(chkButton(BUTTON_X) != 0);
+    /* Tyres squeal when the stick asks for a sharp turn at speed. */
+    if (stick > 0.0f && revs > 0.6f) {
+        f32 off = (f32)ABS(want_turn) - (f32)DEG2SHORT_ANGLE2(25.0f);
+
+        if (off > 0.0f) {
+            skid = (revs - 0.6f) * 2.5f * (off / (f32)DEG2SHORT_ANGLE2(30.0f));
+            if (skid > 0.6f) {
+                skid = 0.6f;
+            }
+        }
+    }
+    pc_sfx_car_skid(skid);
 }
 
 static void Player_actor_Pc_drive_scrape(ACTOR* actorx, const mCoBG_Check_c* bg_check) {
@@ -334,25 +530,24 @@ static int Player_actor_Pc_drive_exit_ok(ACTOR* actorx, const xyz_t* pos) {
 }
 
 static void Player_actor_Pc_drive_get_exit_pos(ACTOR* actorx, xyz_t* exit_pos) {
-    f32 margin = aPCD_PUSH_RADIUS + 8.0f;
-    f32 side_x[2];
+    f32 margin = 8.0f;
+    f32 front = pc_car_box_z_max() + margin;
     xyz_t cand[4];
     int order[4] = { 0, 1, 2, 3 };
     int i;
 
-    side_x[0] = pc_car_box_x_max() + margin;
-    side_x[1] = pc_car_box_x_min() - margin;
-    pc_car_local_to_world(side_x[0], 0.0f, &cand[0]);
-    pc_car_local_to_world(side_x[1], 0.0f, &cand[1]);
-    pc_car_local_to_world(0.0f, pc_car_box_z_min() - margin, &cand[2]);
-    pc_car_local_to_world(0.0f, pc_car_box_z_max() + margin, &cand[3]);
-
-    /* Prefer the side facing the camera (south), then the other, then the
-     * ends of the car. */
-    if (cand[1].z > cand[0].z) {
-        order[0] = 1;
-        order[1] = 0;
+    /* The jump-out animation covers a fixed distance: land just past the
+     * body (the parked car lets the player walk out of its push zone). */
+    if (front < aPCD_EXIT_DIST) {
+        front = aPCD_EXIT_DIST;
     }
+    pc_car_local_to_world(aPCD_EXIT_DIST, 0.0f, &cand[0]);
+    pc_car_local_to_world(-aPCD_EXIT_DIST, 0.0f, &cand[1]);
+    pc_car_local_to_world(0.0f, -aPCD_EXIT_DIST, &cand[2]);
+    pc_car_local_to_world(0.0f, front, &cand[3]);
+
+    /* The stand-up animation turns to the left side: prefer that, then
+     * the right, then the ends of the car. */
 
     for (i = 0; i < 4; i++) {
         xyz_t* pos = &cand[order[i]];
@@ -372,7 +567,9 @@ static void Player_actor_Pc_drive_get_exit_pos(ACTOR* actorx, xyz_t* exit_pos) {
 static void Player_actor_main_Pc_drive(ACTOR* actorx, GAME* game) {
     PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
     mPlayer_main_pc_drive_c* drive_p = &player->main_data.pc_drive;
+    cKF_FrameControl_c* fc0_p = &player->keyframe0.frame_control;
     f32 last_anim0_cur_frame;
+    int end_flag;
 
     if (!g_pc_car.active) {
         /* Car removed with F5 while seated. */
@@ -380,33 +577,101 @@ static void Player_actor_main_Pc_drive(ACTOR* actorx, GAME* game) {
         return;
     }
 
+    if (drive_p->phase == mPlayer_PC_DRIVE_PHASE_DRIVE) {
+        Player_actor_Movement_Pc_drive(actorx, game);
+        Player_actor_Reinput_force_position_angle(actorx, game);
+    }
+
+    end_flag = Player_actor_CulcAnimation_Base2(actorx, &last_anim0_cur_frame);
+    if (drive_p->phase == mPlayer_PC_DRIVE_PHASE_DRIVE) {
+        end_flag = FALSE;
+    }
+
     switch (drive_p->phase) {
         case mPlayer_PC_DRIVE_PHASE_GETON:
-            if (Player_actor_Movement_Pc_drive_hop(actorx, aPCD_PLAYER_OFS_Y, Player_actor_Pc_drive_seat_ofs_y(),
-                                                   g_pc_car.angle)) {
-                actorx->shape_info.rotation.y = g_pc_car.angle;
-                actorx->world.angle.y = g_pc_car.angle;
-                drive_p->phase = mPlayer_PC_DRIVE_PHASE_DRIVE;
-                drive_p->timer = 0.0f;
+            if (Player_actor_Check_AnimationFrame_PerfectEquel(actorx, last_anim0_cur_frame) == FALSE) {
+                if (Player_actor_Check_AnimationFrame(fc0_p, 15.0f)) {
+                    Player_actor_sound_JUMP(actorx);
+                }
+            }
+            Player_actor_DisappearShadow_fromAnimationFrame(actorx, 10.0f, 19.0f);
+            Player_actor_Movement_Pc_drive_anim(actorx);
+            Player_actor_Reset_force_position_angle(actorx);
+            Player_actor_Pc_drive_blend_ofs_y(actorx);
+            if (end_flag) {
+                cKF_SkeletonInfo_R_AnimationMove_dt(&player->keyframe0);
+                actorx->shape_info.rotation.y += DEG2SHORT_ANGLE2(-90.0f);
+                actorx->world.angle.y = actorx->shape_info.rotation.y;
+                actorx->shape_info.shadow_size_change_rate = 0.0f;
+                actorx->shape_info.shadow_alpha_change_rate = 0.0f;
+                Player_actor_sound_LANDING(actorx);
+                Player_actor_Pc_drive_start_sitdown(actorx, game);
+            }
+            break;
+
+        case mPlayer_PC_DRIVE_PHASE_SITDOWN:
+            Player_actor_Movement_Base_Stop(actorx, FALSE);
+            Player_actor_Reset_force_position_angle(actorx);
+            Player_actor_Pc_drive_blend_ofs_y(actorx);
+            if (Player_actor_Check_AnimationFrame_PerfectEquel(actorx, last_anim0_cur_frame) == FALSE &&
+                Player_actor_Check_AnimationFrame(fc0_p, 28.0f)) {
                 Player_actor_sound_SIT(actorx, -1);
+            }
+            if (end_flag) {
+                Player_actor_Pc_drive_start_drive(actorx, game);
+                /* Engine on, with a blip of the throttle. */
+                pc_sfx_car_engine(TRUE, 0.0f);
+                pc_sfx_car_rev();
             }
             break;
 
         case mPlayer_PC_DRIVE_PHASE_DRIVE:
-            Player_actor_Movement_Pc_drive(actorx, game);
-            Player_actor_Reinput_force_position_angle(actorx, game);
+            break;
+
+        case mPlayer_PC_DRIVE_PHASE_STANDUP:
+            Player_actor_Movement_Pc_drive_anim(actorx);
+            Player_actor_Reset_force_position_angle(actorx);
+            Player_actor_Pc_drive_blend_ofs_y(actorx);
+            if (Player_actor_Check_AnimationFrame_PerfectEquel(actorx, last_anim0_cur_frame) == FALSE) {
+                if (Player_actor_Check_AnimationFrame(fc0_p, 6.0f)) {
+                    Player_actor_sound_STANDUP(actorx, -1);
+                } else if (Player_actor_Check_AnimationFrame(fc0_p, 21.0f)) {
+                    Player_actor_sound_LANDING(actorx);
+                }
+            }
+            if (end_flag) {
+                cKF_SkeletonInfo_R_AnimationMove_dt(&player->keyframe0);
+                actorx->world.angle.y = actorx->shape_info.rotation.y;
+                Player_actor_Pc_drive_start_getoff(actorx, game);
+            }
             break;
 
         case mPlayer_PC_DRIVE_PHASE_GETOFF:
-            if (Player_actor_Movement_Pc_drive_hop(actorx, Player_actor_Pc_drive_seat_ofs_y(), aPCD_PLAYER_OFS_Y,
-                                                   g_pc_car.angle)) {
+            Player_actor_Movement_Pc_drive_anim(actorx);
+            Player_actor_Reset_force_position_angle(actorx);
+            Player_actor_AppearShadow_fromAnimationFrame(actorx, 8.0f, 16.0f);
+            Player_actor_Pc_drive_blend_ofs_y(actorx);
+            if (Player_actor_Check_AnimationFrame_PerfectEquel(actorx, last_anim0_cur_frame) == FALSE &&
+                Player_actor_Check_AnimationFrame(fc0_p, 15.0f)) {
                 Player_actor_sound_LANDING(actorx);
+            }
+            if (end_flag) {
+                cKF_SkeletonInfo_R_AnimationMove_dt(&player->keyframe0);
+                actorx->world.angle.y = actorx->shape_info.rotation.y;
                 Player_actor_request_main_wait_all(game, -5.0f, 0.0f, 0, mPlayer_REQUEST_PRIORITY_4);
             }
             break;
     }
 
-    Player_actor_CulcAnimation_Base2(actorx, &last_anim0_cur_frame);
+    /* The body settles back level whenever the driver isn't steering. */
+    if (drive_p->phase != mPlayer_PC_DRIVE_PHASE_DRIVE) {
+        add_calc_short_angle2(&g_pc_car.roll, 0, CALC_EASE(0.15f), 0x400, 0x10);
+        add_calc_short_angle2(&g_pc_car.pitch, 0, CALC_EASE(0.15f), 0x400, 0x10);
+        add_calc_short_angle2(&g_pc_car.steer, 0, CALC_EASE(0.15f), 0x800, 0x10);
+        g_pc_car.bob *= 0.8f;
+        player->boat_angleZ = g_pc_car.roll;
+    }
+
     Player_actor_recover_lean_angle(actorx);
     Player_actor_set_eye_pattern_normal(actorx);
 
@@ -422,8 +687,8 @@ static void Player_actor_main_Pc_drive(ACTOR* actorx, GAME* game) {
 
     Player_actor_Item_main(actorx, game);
 
-    /* Borderless acres: a hop can land in the next acre, swap the block like
-     * walking does. (With original transitions hops stay in the acre.) */
+    /* Borderless acres: a jump can land in the next acre, swap the block like
+     * walking does. (With original transitions jumps stay in the acre.) */
     if (drive_p->phase != mPlayer_PC_DRIVE_PHASE_DRIVE && g_mPlib_wade_disabled) {
         Player_actor_Set_ScrollDemo_forWade(actorx, game, mEv_IsNotTitleDemo());
     }
@@ -435,7 +700,7 @@ static void Player_actor_main_Pc_drive(ACTOR* actorx, GAME* game) {
             xyz_t exit_pos;
 
             Player_actor_Pc_drive_get_exit_pos(actorx, &exit_pos);
-            Player_actor_Pc_drive_start_hop(actorx, game, mPlayer_PC_DRIVE_PHASE_GETOFF, &exit_pos);
+            Player_actor_Pc_drive_start_standup(actorx, game, &exit_pos);
         }
     }
 }
@@ -474,13 +739,14 @@ static void Player_actor_Pc_car_puff(GAME* game) {
 static void Player_actor_Pc_car_spawn(ACTOR* actorx, GAME* game) {
     s16 angle = actorx->shape_info.rotation.y;
     xyz_t pos = actorx->world.position;
-    /* Side-on in front of the player, driver's door (+X) a step away. */
-    f32 dist = pc_car_box_x_max() + aPCD_PUSH_RADIUS + 6.0f;
+    /* Side-on in front of the player, its right side a step away: the
+     * jump-in animation hops in from the right. */
+    f32 dist = -pc_car_box_x_min() + aPCD_PUSH_RADIUS + 6.0f;
     f32 y;
 
     pos.x += dist * sin_s(angle);
     pos.z += dist * cos_s(angle);
-    g_pc_car.angle = angle + DEG2SHORT_ANGLE2(90.0f);
+    g_pc_car.angle = angle - DEG2SHORT_ANGLE2(90.0f);
     y = mCoBG_GetBgY_OnlyCenter_FromWpos2(pos, 0.0f);
 
     if (ABS(y - actorx->world.position.y) < 15.0f && Player_actor_Pc_drive_same_acre(&actorx->world.position, &pos) &&
@@ -490,6 +756,7 @@ static void Player_actor_Pc_car_spawn(ACTOR* actorx, GAME* game) {
         g_pc_car.pos = pos;
         g_pc_car.active = TRUE;
         g_pc_car.ghost = FALSE;
+        g_pc_car.seated = FALSE;
     } else {
         /* No room in front (water, cliff, trees): pop it around the player and get in. */
         g_pc_car.pos = actorx->world.position;
@@ -498,6 +765,7 @@ static void Player_actor_Pc_car_spawn(ACTOR* actorx, GAME* game) {
         /* No push while they are inside, even if the hop-in request loses
          * to something else this frame. */
         g_pc_car.ghost = TRUE;
+        g_pc_car.seated = TRUE;
         Player_actor_request_main_pc_drive_all(game, mPlayer_REQUEST_PRIORITY_10);
     }
 
@@ -624,6 +892,7 @@ static void Player_actor_Pc_car_move_before(ACTOR* actorx, GAME* game) {
     /* Left the car some other way (event warp, scene change). */
     if (g_pc_car.driving && main_index != mPlayer_INDEX_PC_DRIVE && main_index != mPlayer_INDEX_WADE) {
         g_pc_car.driving = FALSE;
+        Player_actor_Pc_drive_sfx_off();
     }
     if (!g_pc_car.driving && main_index != mPlayer_INDEX_PC_DRIVE) {
         actorx->shape_info.ofs_y = aPCD_PLAYER_OFS_Y;
@@ -633,6 +902,7 @@ static void Player_actor_Pc_car_move_before(ACTOR* actorx, GAME* game) {
         if (g_pc_car.active) {
             Player_actor_Pc_car_puff(game);
             g_pc_car.active = FALSE;
+            Player_actor_Pc_drive_sfx_off();
         } else if (Player_actor_Pc_car_able_place(game) && Player_actor_Pc_car_in_free_state(main_index)) {
             Player_actor_Pc_car_spawn(actorx, game);
         }
@@ -643,6 +913,7 @@ static void Player_actor_Pc_car_move_before(ACTOR* actorx, GAME* game) {
         Player_actor_Pc_car_in_free_state(main_index) && chkTrigger(BUTTON_A) &&
         Player_actor_Pc_car_in_reach(actorx) &&
         Player_actor_Pc_drive_same_acre(&actorx->world.position, &g_pc_car.pos)) {
+        g_pc_car.seated = FALSE;
         Player_actor_request_main_pc_drive_all(game, mPlayer_REQUEST_PRIORITY_10);
     }
 }

@@ -34,11 +34,18 @@ struct game_s;
 #define PC_CAR_WHEEL_BOTTOM 544.0f
 
 typedef struct {
-    int active;  /* the car exists in the town */
-    int driving; /* the player is seated in it (mPlayer_INDEX_PC_DRIVE) */
-    int ghost;   /* the player left it without hopping out: no push until clear */
-    xyz_t pos;   /* seat anchor on the ground (player root while driving) */
-    s16 angle;   /* heading, actor convention: moves along (sin, cos) */
+    int active;   /* the car exists in the town */
+    int driving;  /* the player is seated in it (mPlayer_INDEX_PC_DRIVE) */
+    int ghost;    /* the player left it without hopping out: no push until clear */
+    int seated;   /* spawn around the player: skip the jump in, just sit down */
+    xyz_t pos;    /* seat anchor on the ground (player root while driving) */
+    s16 angle;    /* heading, actor convention: moves along (sin, cos) */
+    /* animation state, written by the drive state each frame */
+    s16 wheel;    /* wheel spin angle */
+    s16 steer;    /* steering wheel angle (+ = left) */
+    s16 roll;     /* body roll about the forward axis */
+    s16 pitch;    /* body pitch about the side axis */
+    f32 bob;      /* engine shake, world units */
 } PcCar;
 
 extern PcCar g_pc_car;

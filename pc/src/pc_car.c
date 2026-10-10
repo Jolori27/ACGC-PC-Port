@@ -128,39 +128,114 @@ static Gfx pc_car_mirror_t2[] = {
     gsSPEndDisplayList(),
 };
 
-static Gfx pc_car_mirror_t3[] = {
-    gsSPTexture(0, 0, 0, G_TX_RENDERTILE, G_ON),
-    gsDPSetCombineLERP(TEXEL0, 0, PRIMITIVE, 0, 0, 0, 0, TEXEL0, COMBINED, 0, SHADE, 0, 0, 0, 0, COMBINED),
-    gsDPSetRenderMode(G_RM_FOG_SHADE_A, G_RM_AA_ZB_TEX_EDGE2),
-    gsDPLoadTLUT_Dolphin(15, 16, 1, obj_s_car_pal),
-    gsDPSetTextureImage_Dolphin(G_IM_FMT_CI, G_IM_SIZ_4b, 128, 32, obj_s_car_t3_tex),
-    gsDPSetTile_Dolphin(G_DOLPHIN_TLUT_DEFAULT_MODE, 0, 15, GX_MIRROR, GX_MIRROR, 0, 0),
-    gsSPLoadGeometryMode(PC_CAR_MIRROR_GEOMETRY),
+/* t3 minus the two wheels (base vertex 59: wheels are 62..66 and 67..71),
+ * one list per culling side. */
+#define PC_CAR_T3_HEADER(tex_geometry)                                                                  \
+    gsSPTexture(0, 0, 0, G_TX_RENDERTILE, G_ON),                                                        \
+        gsDPSetCombineLERP(TEXEL0, 0, PRIMITIVE, 0, 0, 0, 0, TEXEL0, COMBINED, 0, SHADE, 0, 0, 0, 0, COMBINED), \
+        gsDPSetRenderMode(G_RM_FOG_SHADE_A, G_RM_AA_ZB_TEX_EDGE2), gsDPLoadTLUT_Dolphin(15, 16, 1, obj_s_car_pal), \
+        gsDPSetTextureImage_Dolphin(G_IM_FMT_CI, G_IM_SIZ_4b, 128, 32, obj_s_car_t3_tex),               \
+        gsDPSetTile_Dolphin(G_DOLPHIN_TLUT_DEFAULT_MODE, 0, 15, GX_MIRROR, GX_MIRROR, 0, 0),            \
+        gsSPLoadGeometryMode(tex_geometry)
+
+#define PC_CAR_GEOMETRY (G_ZBUFFER | G_SHADE | G_CULL_BACK | G_FOG | G_LIGHTING | G_SHADING_SMOOTH | G_DECAL_LEQUAL)
+
+static Gfx pc_car_body_t3[] = {
+    PC_CAR_T3_HEADER(PC_CAR_GEOMETRY),
     gsSPVertex(&obj_s_car_v[59], 21, 0),
-    gsSPNTrianglesInit_5b(13, 0, 1, 2, 3, 4, 5, 6, 3, 5),
-    gsSPNTriangles_5b(5, 4, 7, 6, 5, 7, 8, 9, 10, 9, 11, 10),
-    gsSPNTriangles_5b(8, 12, 9, 12, 11, 9, 13, 14, 15, 13, 15, 16),
+    gsSPNTrianglesInit_5b(5, 0, 1, 2, 13, 14, 15, 13, 15, 16),
     gsSPNTriangles_5b(17, 18, 19, 17, 19, 20, 0, 0, 0, 0, 0, 0),
     gsSPEndDisplayList(),
 };
 
-static Gfx pc_car_mirror_inner[] = {
-    gsSPTexture(0, 0, 0, G_TX_RENDERTILE, G_ON),
-    gsDPSetCombineLERP(TEXEL0, 0, SHADE, 0, 0, 0, 0, TEXEL0, 0, 0, 0, COMBINED, 0, 0, 0, COMBINED),
-    gsDPSetRenderMode(G_RM_FOG_SHADE_A, G_RM_AA_ZB_TEX_EDGE2),
-    gsDPLoadTLUT_Dolphin(15, 16, 1, obj_s_car_pal),
-    gsDPSetTextureImage_Dolphin(G_IM_FMT_CI, G_IM_SIZ_4b, 128, 32, obj_s_car_t3_tex),
-    gsDPSetTile_Dolphin(G_DOLPHIN_TLUT_DEFAULT_MODE, 0, 15, GX_MIRROR, GX_MIRROR, 0, 0),
-    gsDPSetPrimColor(0, 128, 255, 255, 255, 255),
-    gsSPLoadGeometryMode(PC_CAR_MIRROR_GEOMETRY),
+static Gfx pc_car_mirror_t3[] = {
+    PC_CAR_T3_HEADER(PC_CAR_MIRROR_GEOMETRY),
+    gsSPVertex(&obj_s_car_v[59], 21, 0),
+    gsSPNTrianglesInit_5b(5, 0, 1, 2, 13, 14, 15, 13, 15, 16),
+    gsSPNTriangles_5b(17, 18, 19, 17, 19, 20, 0, 0, 0, 0, 0, 0),
+    gsSPEndDisplayList(),
+};
+
+/* The wheels: a fan of four triangles around a hub vertex each. */
+static Gfx pc_car_wheel_front[] = {
+    PC_CAR_T3_HEADER(PC_CAR_GEOMETRY),
+    gsSPVertex(&obj_s_car_v[62], 5, 0),
+    gsSPNTrianglesInit_5b(4, 0, 1, 2, 3, 0, 2, 2, 1, 4),
+    gsSPNTriangles_5b(3, 2, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    gsSPEndDisplayList(),
+};
+
+static Gfx pc_car_wheel_front_mirror[] = {
+    PC_CAR_T3_HEADER(PC_CAR_MIRROR_GEOMETRY),
+    gsSPVertex(&obj_s_car_v[62], 5, 0),
+    gsSPNTrianglesInit_5b(4, 0, 1, 2, 3, 0, 2, 2, 1, 4),
+    gsSPNTriangles_5b(3, 2, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    gsSPEndDisplayList(),
+};
+
+static Gfx pc_car_wheel_rear[] = {
+    PC_CAR_T3_HEADER(PC_CAR_GEOMETRY),
+    gsSPVertex(&obj_s_car_v[67], 5, 0),
+    gsSPNTrianglesInit_5b(4, 0, 1, 2, 1, 3, 2, 0, 4, 1),
+    gsSPNTriangles_5b(4, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    gsSPEndDisplayList(),
+};
+
+static Gfx pc_car_wheel_rear_mirror[] = {
+    PC_CAR_T3_HEADER(PC_CAR_MIRROR_GEOMETRY),
+    gsSPVertex(&obj_s_car_v[67], 5, 0),
+    gsSPNTrianglesInit_5b(4, 0, 1, 2, 1, 3, 2, 0, 4, 1),
+    gsSPNTriangles_5b(4, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    gsSPEndDisplayList(),
+};
+
+#define PC_CAR_INNER_HEADER(tex_geometry)                                                                 \
+    gsSPTexture(0, 0, 0, G_TX_RENDERTILE, G_ON),                                                          \
+        gsDPSetCombineLERP(TEXEL0, 0, SHADE, 0, 0, 0, 0, TEXEL0, 0, 0, 0, COMBINED, 0, 0, 0, COMBINED),   \
+        gsDPSetRenderMode(G_RM_FOG_SHADE_A, G_RM_AA_ZB_TEX_EDGE2), gsDPLoadTLUT_Dolphin(15, 16, 1, obj_s_car_pal), \
+        gsDPSetTextureImage_Dolphin(G_IM_FMT_CI, G_IM_SIZ_4b, 128, 32, obj_s_car_t3_tex),                 \
+        gsDPSetTile_Dolphin(G_DOLPHIN_TLUT_DEFAULT_MODE, 0, 15, GX_MIRROR, GX_MIRROR, 0, 0),              \
+        gsDPSetPrimColor(0, 128, 255, 255, 255, 255), gsSPLoadGeometryMode(tex_geometry)
+
+/* Interior minus the steering wheel (the last two triangles, vertices
+ * 106..109), which is drawn on its own so it can turn. */
+static Gfx pc_car_body_inner[] = {
+    PC_CAR_INNER_HEADER(PC_CAR_GEOMETRY),
     gsSPVertex(&obj_s_car_v[80], 30, 0),
-    /* The last two triangles of the original list (the steering wheel,
-     * vertices 106..109) are left out: one wheel, on the driver's side. */
     gsSPNTrianglesInit_5b(16, 0, 1, 2, 0, 2, 3, 4, 5, 6),
     gsSPNTriangles_5b(4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14),
     gsSPNTriangles_5b(12, 15, 13, 15, 16, 13, 17, 18, 15, 17, 15, 12),
     gsSPNTriangles_5b(19, 20, 21, 22, 19, 21, 22, 21, 23, 24, 25, 18),
     gsSPNTriangles_5b(24, 18, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    gsSPEndDisplayList(),
+};
+
+static Gfx pc_car_mirror_inner[] = {
+    PC_CAR_INNER_HEADER(PC_CAR_MIRROR_GEOMETRY),
+    gsSPVertex(&obj_s_car_v[80], 30, 0),
+    gsSPNTrianglesInit_5b(16, 0, 1, 2, 0, 2, 3, 4, 5, 6),
+    gsSPNTriangles_5b(4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14),
+    gsSPNTriangles_5b(12, 15, 13, 15, 16, 13, 17, 18, 15, 17, 15, 12),
+    gsSPNTriangles_5b(19, 20, 21, 22, 19, 21, 22, 21, 23, 24, 25, 18),
+    gsSPNTriangles_5b(24, 18, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    gsSPEndDisplayList(),
+};
+
+static Gfx pc_car_steering[] = {
+    PC_CAR_INNER_HEADER(PC_CAR_GEOMETRY),
+    gsSPVertex(&obj_s_car_v[106], 4, 0),
+    gsSPNTrianglesInit_5b(2, 0, 1, 2, 0, 2, 3, 0, 0, 0),
+    gsSPEndDisplayList(),
+};
+
+extern Gfx obj_s_car_t1T_model[];
+extern Gfx obj_s_car_t2T_model[];
+
+static Gfx pc_car_body_DL[] = {
+    gsSPDisplayList(obj_s_car_t1T_model),
+    gsSPDisplayList(obj_s_car_t2T_model),
+    gsSPDisplayList(pc_car_body_t3),
+    gsSPDisplayList(pc_car_body_inner),
     gsSPEndDisplayList(),
 };
 
@@ -172,6 +247,18 @@ static Gfx pc_car_mirror_DL[] = {
     gsSPEndDisplayList(),
 };
 
+/* Hubs and steering wheel centre, car-aligned model units (from the
+ * vertex data: hub vertices 64 and 68, wheel quad 106..109). */
+#define PC_CAR_HUB_X 2812.0f
+#define PC_CAR_HUB_Y 1313.0f
+#define PC_CAR_FRONT_HUB_Z 3000.0f
+#define PC_CAR_REAR_HUB_Z (-3750.0f)
+#define PC_CAR_STEER_X 1312.0f
+#define PC_CAR_STEER_Y 2961.0f
+#define PC_CAR_STEER_Z 1041.0f
+/* Steering wheel face tilt, about the side axis. */
+#define PC_CAR_STEER_TILT 0
+
 /* Copy of the designer car's shadow setup (ac_s_car.c). */
 static u8 pc_car_shadow_fix_flags[24] = {
     FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE,  TRUE,  TRUE,  TRUE,  TRUE,  TRUE,
@@ -182,21 +269,63 @@ static bIT_ShadowData_c pc_car_shadow_data = {
     23, pc_car_shadow_fix_flags, 60.0f, obj_car_shadow_v, obj_car_shadowT_model,
 };
 
-/* Seat anchor -> car-aligned model space, then undo the 45 degree authoring
- * rotation (model +X+Z diagonal becomes the car's side, -X+Z its hood).
- * lift_y raises the body so the wheels touch the ground; the shadow stays
- * flat on it. */
-static void pc_car_load_matrix(int mirrored, f32 lift_y) {
+/* Seat anchor -> car-aligned model space (metres along the car: +Z hood,
+ * +X left side), with the body's roll and pitch. lift_y raises the body so
+ * the wheels touch the ground; the shadow stays flat on it. */
+static void pc_car_load_aligned(f32 lift_y, int animated) {
     s_xyz rot = { 0, 0, 0 };
 
     rot.y = g_pc_car.angle;
-    Matrix_softcv3_load(&rot, g_pc_car.pos.x, g_pc_car.pos.y, g_pc_car.pos.z);
+    Matrix_softcv3_load(&rot, g_pc_car.pos.x, g_pc_car.pos.y + (animated ? g_pc_car.bob : 0.0f), g_pc_car.pos.z);
+    if (animated) {
+        Matrix_RotateX(g_pc_car.pitch, MTX_MULT);
+        Matrix_RotateZ(-g_pc_car.roll, MTX_MULT);
+    }
     Matrix_scale(PC_CAR_SCALE, PC_CAR_SCALE, PC_CAR_SCALE, MTX_MULT);
     Matrix_translate(-PC_CAR_SEAT_X, lift_y, -PC_CAR_SEAT_Z, MTX_MULT);
+}
+
+/* ... then undo the 45 degree authoring rotation (model +X+Z diagonal
+ * becomes the car's side, -X+Z its hood), mirrored across the car's
+ * centre line for the other half. */
+static void pc_car_to_model(int mirrored) {
     if (mirrored) {
         Matrix_scale(-1.0f, 1.0f, 1.0f, MTX_MULT);
     }
     Matrix_RotateY(DEG2SHORT_ANGLE2(45.0f), MTX_MULT);
+}
+
+static void pc_car_draw_list(GRAPH* graph, Gfx* list) {
+    OPEN_DISP(graph);
+    gDPPipeSync(NEXT_POLY_OPA_DISP);
+    gDPSetPrimColor(NEXT_POLY_OPA_DISP, 0, 128, 255, 255, 255, 255);
+    gSPMatrix(NEXT_POLY_OPA_DISP, _Matrix_to_Mtx_new(graph), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(NEXT_POLY_OPA_DISP, list);
+    CLOSE_DISP(graph);
+}
+
+/* A part that turns about its own centre: translate there in the aligned
+ * frame, rotate, go to model space, translate back from the model-space
+ * centre (the aligned centre rotated by 45 degrees). */
+static void pc_car_draw_turning(GRAPH* graph, Gfx* list, int mirrored, f32 cx, f32 cy, f32 cz, s16 rot_x, s16 rot_z) {
+    const f32 r = 0.70710678f;
+    /* aligned (cx, cz) -> model (x, z): X = (cx - cz) * r, Z = (cx + cz) * r */
+    f32 mx = (cx - cz) * r;
+    f32 mz = (cx + cz) * r;
+
+    Matrix_push();
+    pc_car_load_aligned(PC_CAR_WHEEL_BOTTOM, TRUE);
+    Matrix_translate(mirrored ? -cx : cx, cy, cz, MTX_MULT);
+    if (rot_x != 0) {
+        Matrix_RotateX(rot_x, MTX_MULT);
+    }
+    if (rot_z != 0) {
+        Matrix_RotateZ(rot_z, MTX_MULT);
+    }
+    pc_car_to_model(mirrored);
+    Matrix_translate(-mx, -cy, -mz, MTX_MULT);
+    pc_car_draw_list(graph, list);
+    Matrix_pull();
 }
 
 void pc_car_draw(GAME* game) {
@@ -221,19 +350,26 @@ void pc_car_draw(GAME* game) {
     CLOSE_DISP(graph);
 
     for (mirrored = 0; mirrored < 2; mirrored++) {
-        pc_car_load_matrix(mirrored, PC_CAR_WHEEL_BOTTOM);
+        pc_car_load_aligned(PC_CAR_WHEEL_BOTTOM, TRUE);
+        pc_car_to_model(mirrored);
+        pc_car_draw_list(graph, mirrored ? pc_car_mirror_DL : pc_car_body_DL);
 
-        OPEN_DISP(graph);
-        gDPPipeSync(NEXT_POLY_OPA_DISP);
-        gDPSetPrimColor(NEXT_POLY_OPA_DISP, 0, 128, 255, 255, 255, 255);
-        gSPMatrix(NEXT_POLY_OPA_DISP, _Matrix_to_Mtx_new(graph), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-        gSPDisplayList(NEXT_POLY_OPA_DISP, mirrored ? pc_car_mirror_DL : s_car_DL_model);
-        CLOSE_DISP(graph);
+        /* Wheels spin about the side axis; the mirrored side turns the
+         * other way in its flipped frame. */
+        pc_car_draw_turning(graph, mirrored ? pc_car_wheel_front_mirror : pc_car_wheel_front, mirrored, PC_CAR_HUB_X,
+                            PC_CAR_HUB_Y, PC_CAR_FRONT_HUB_Z, g_pc_car.wheel, 0);
+        pc_car_draw_turning(graph, mirrored ? pc_car_wheel_rear_mirror : pc_car_wheel_rear, mirrored, PC_CAR_HUB_X,
+                            PC_CAR_HUB_Y, PC_CAR_REAR_HUB_Z, g_pc_car.wheel, 0);
     }
 
-    /* The shadow mesh covers the whole footprint: draw it once. */
+    /* Steering wheel, driver's side only, turning about its own axis. */
+    pc_car_draw_turning(graph, pc_car_steering, FALSE, PC_CAR_STEER_X, PC_CAR_STEER_Y, PC_CAR_STEER_Z, PC_CAR_STEER_TILT,
+                        g_pc_car.steer);
+
+    /* The shadow mesh covers the whole footprint: draw it once, flat. */
     if (Common_Get(clip).bg_item_clip != NULL && Common_Get(clip).bg_item_clip->draw_shadow_proc != NULL) {
-        pc_car_load_matrix(FALSE, 0.0f);
+        pc_car_load_aligned(0.0f, FALSE);
+        pc_car_to_model(FALSE);
         (*Common_Get(clip).bg_item_clip->draw_shadow_proc)(game, &pc_car_shadow_data, FALSE);
     }
 

@@ -10,6 +10,7 @@
  */
 #include "pc_platform.h"
 #include "pc_settings.h"
+#include "pc_sfx.h"
 #include "jaudio_NES/audiothread.h"
 
 #define PC_AUDIO_SAMPLE_RATE 32000
@@ -138,6 +139,22 @@ void AIInitDMA(u32 addr, u32 size) {
         if (s >  32767) s =  32767;
         if (s < -32768) s = -32768;
         ring_buffer[(wp + i) & RING_BUF_MASK] = (s16)s;
+    }
+
+    /* PC synthesized effects (debug car), mixed straight into the ring
+     * buffer; the block never wraps when the ring is a power of two and
+     * n_samples divides it, else fall back to a small copy. */
+    if (n_samples > 0) {
+        u32 start = wp & RING_BUF_MASK;
+        if (start + n_samples <= RING_BUF_SAMPLES) {
+            pc_sfx_mix(&ring_buffer[start], (int)(n_samples / 2), PC_AUDIO_SAMPLE_RATE, vol);
+        } else {
+            static s16 tmp[4096];
+            u32 todo = n_samples < 4096 ? n_samples : 4096;
+            for (u32 i = 0; i < todo; i++) tmp[i] = ring_buffer[(wp + i) & RING_BUF_MASK];
+            pc_sfx_mix(tmp, (int)(todo / 2), PC_AUDIO_SAMPLE_RATE, vol);
+            for (u32 i = 0; i < todo; i++) ring_buffer[(wp + i) & RING_BUF_MASK] = tmp[i];
+        }
     }
 
     SDL_MemoryBarrierRelease();

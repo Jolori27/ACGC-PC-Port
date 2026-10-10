@@ -305,7 +305,7 @@ Keyboard mapping:
 - **IJKL** = D-pad
 - **Q/E** = L/R triggers, **Z** = Z trigger
 - **F3** = toggle frame limiter
-- **F5** = debug car: pops Gracie's car in front of the player in town (A next to it gets in, B gets out, F5 again removes it)
+- **F5** = debug car: pops Gracie's car in front of the player in town (A next to it gets in, B gets out, X honks, F5 again removes it)
 - **ESC** = quit
 
 SDL2 gamepad with hotplug, analog sticks (deadzone 500), triggers, D-pad, and rumble.

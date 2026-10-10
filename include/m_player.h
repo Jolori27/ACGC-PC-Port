@@ -1959,17 +1959,20 @@ typedef struct player_main_demo_get_golden_axe_wait_s {
 
 #ifdef TARGET_PC
 enum {
-    mPlayer_PC_DRIVE_PHASE_GETON,
-    mPlayer_PC_DRIVE_PHASE_DRIVE,
-    mPlayer_PC_DRIVE_PHASE_GETOFF,
+    mPlayer_PC_DRIVE_PHASE_GETON,   /* jumping in (mPlayer_ANIM_RIDE1) */
+    mPlayer_PC_DRIVE_PHASE_SITDOWN, /* sitting down (mPlayer_ANIM_RIDE2) */
+    mPlayer_PC_DRIVE_PHASE_DRIVE,   /* seated, driving (mPlayer_ANIM_RIDEWAIT) */
+    mPlayer_PC_DRIVE_PHASE_STANDUP, /* standing up (mPlayer_ANIM_GETOFF1) */
+    mPlayer_PC_DRIVE_PHASE_GETOFF,  /* jumping out (mPlayer_ANIM_GETOFF2) */
 };
 
 typedef struct {
     int phase;
     f32 timer;
-    f32 duration;
-    xyz_t start_pos;
-    xyz_t end_pos;
+    f32 ofs_y_from; /* draw offset blended over the sit-down / stand-up */
+    f32 ofs_y_to;
+    xyz_t exit_pos;
+    s16 exit_angle;
 } mPlayer_main_pc_drive_c;
 #endif
 
