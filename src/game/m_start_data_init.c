@@ -648,6 +648,10 @@ static int mSDI_PcQuickStart(void) {
     priv->gender = g_pc_settings.quick_start_gender ? mPr_SEX_FEMALE : mPr_SEX_MALE;
     priv->face = RANDOM(mPr_FACE_TYPE_NUM);
 
+    /* Rover's actor teardown (aNGD_actor_dt): villagers were created before
+     * the town had a name, give them this town's name. */
+    mNpc_SetAnimalThisLand(Save_Get(animals), ANIMAL_NUM_MAX);
+
     /* End of the train ride (aNGD_scene_change_wait_init) */
     Save_Set(all_grow_renew_time, mTM_rtcTime_clear_code);
     mLd_CopyLandName(priv->player_ID.land_name, Save_Get(land_info).name);
