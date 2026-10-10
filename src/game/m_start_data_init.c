@@ -608,6 +608,15 @@ extern void mSDI_StartInitAfter(GAME* game, int renew_mode, int malloc_flag) {
 }
 
 #ifdef TARGET_PC
+static int l_pc_quick_start_done = FALSE;
+
+/* TRUE when the last new-town init was set up by the quick start, so the
+ * new-town scene (K.K.'s, aNPS_setup_game_start) must load into town
+ * instead of the train. */
+extern int mSDI_PcQuickStartDone(void) {
+    return l_pc_quick_start_done;
+}
+
 /*
  * PC quick start (settings.ini [QuickStart]): build the state a new town
  * has once Rover's train ride, Tom Nook's house sale and the part-time
@@ -719,8 +728,9 @@ extern int mSDI_StartDataInit(GAME* game, int player_no, int init_mode) {
     if (res == TRUE) {
         mSDI_StartInitAfter(game, renew_reserve_mode_table[init_mode], mSDI_MALLOC_FLAG_ZELDA);
 #ifdef TARGET_PC
+        l_pc_quick_start_done = FALSE;
         if (init_mode == mSDI_INIT_MODE_NEW && g_pc_settings.quick_start) {
-            mSDI_PcQuickStart();
+            l_pc_quick_start_done = mSDI_PcQuickStart();
         }
 #endif
     }

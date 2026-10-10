@@ -1,3 +1,24 @@
+#ifdef TARGET_PC
+/* Quick start (settings.ini): the new town is already set up, so walk out
+ * of the new house like a continued game does (aNPS2_make_door_data). */
+static void aNPS_make_quick_start_door_data(Door_data_c* door_data) {
+    static s16 homeX[] = { 2128, 2352, 2128, 2352 };
+    static s16 homeZ[] = { 1488, 1488, 1768, 1768 };
+    static u8 drt[] = { mSc_DIRECT_SOUTH_EAST, mSc_DIRECT_SOUTH_WEST, mSc_DIRECT_SOUTH_EAST, mSc_DIRECT_SOUTH_WEST };
+    int arrange_idx = mHS_get_arrange_idx(Common_Get(player_no));
+
+    door_data->next_scene_id = SCENE_FG;
+    door_data->exit_orientation = drt[arrange_idx];
+    door_data->exit_type = 1;
+    door_data->extra_data = 1;
+    door_data->exit_position.x = homeX[arrange_idx];
+    door_data->exit_position.y = 0;
+    door_data->exit_position.z = homeZ[arrange_idx];
+    door_data->door_actor_name = HOUSE0 + arrange_idx;
+    door_data->wipe_type = WIPE_TYPE_FADE_BLACK;
+}
+#endif
+
 static int aNPS_setup_game_start(GAME_PLAY* play) {
     static Door_data_c door_data = {
         SCENE_START_DEMO, mSc_DIRECT_NORTH, 0, 0, { 120, 0, 340 }, EMPTY_NO, 3, { 0, 0, 0 }
@@ -6,6 +27,17 @@ static int aNPS_setup_game_start(GAME_PLAY* play) {
     int res = FALSE;
 
     if (mCD_InitGameStart_bg(0, -1, 0, &chan) == 0) {
+#ifdef TARGET_PC
+        if (mSDI_PcQuickStartDone()) {
+            Door_data_c quick_start_door_data;
+
+            aNPS_make_quick_start_door_data(&quick_start_door_data);
+            goto_other_scene(play, &quick_start_door_data, TRUE);
+            Common_Set(transition.wipe_type, WIPE_TYPE_TRIFORCE);
+            Common_Set(map_flag, TRUE);
+            return TRUE;
+        }
+#endif
         goto_other_scene(play, &door_data, TRUE);
         Common_Set(transition.wipe_type, WIPE_TYPE_FADE_BLACK);
         Common_Set(map_flag, FALSE);
@@ -19,6 +51,18 @@ static void aNPS_think_main_proc(NPC_ACTOR* nactorx, GAME_PLAY* play) {
     NPC_P_SEL_ACTOR* p_sel = (NPC_P_SEL_ACTOR*)nactorx;
     f32 dt = (f32)play->game.graph->dt_num_60fps_frames;
     u32 alpha;
+
+#ifdef TARGET_PC
+    if (!p_sel->talk_end_flag && g_pc_settings.quick_start) {
+        /* Quick start: skip K.K.'s sound/voice/rumble questions (the defaults
+         * from aNPS_actor_ct stay) and go straight to the fade-out that
+         * normally follows the talk (aNPS_talk_end_chk). */
+        p_sel->strum_timer = 70.0f;
+        p_sel->bgm_stop_timer = 0.0f;
+        bzero(&play->fade_color_value, sizeof(rgba8888));
+        p_sel->talk_end_flag = TRUE;
+    }
+#endif
 
     if (!p_sel->talk_end_flag) {
         if (p_sel->strum_timer <= 0.0f) {

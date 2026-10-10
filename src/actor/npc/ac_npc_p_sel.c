@@ -13,6 +13,12 @@
 #include "libultra/libultra.h"
 #include "dolphin/os/OSRtc.h"
 
+#ifdef TARGET_PC
+#include "m_house.h"
+#include "m_start_data_init.h"
+#include "pc_settings.h"
+#endif
+
 enum {
     aNPS_TALK_CHK_SETUP_SOUND,
     aNPS_TALK_SETUP_SOUND,
