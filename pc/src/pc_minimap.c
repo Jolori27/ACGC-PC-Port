@@ -49,10 +49,12 @@ extern u8 kan_win_ply_tex[];
 #define MM_REFRESH_FRAMES 30.0f
 
 /* The acre art fills the top-left 22x22 texels of each 32x32 tile (the map
- * screen places tiles 22 units apart); the rest is transparent. Bilinear
- * sampling starts half a texel in, so spanning 21 texels stays inside the
- * art and neighbouring tiles join without a seam. */
-#define MM_ACRE_TEXELS 21.0f
+ * screen places tiles 22 units apart); the rest is transparent, and the
+ * outermost texels draw a light grid line between acres. Skip one texel on
+ * each side (bilinear sampling adds half a texel, so texel centres 1.5 to
+ * 20.5 are used) and neighbouring acres join seamlessly. */
+#define MM_ACRE_TEXEL_START 1.0f
+#define MM_ACRE_TEXELS      19.0f
 
 static const mMP_Ovl_c* s_map = NULL;
 static f32 s_alpha = 0.0f; /* 0..1, fades on toggle */
@@ -138,15 +140,18 @@ static int mm_q(f32 v) {
  * space, showing tex_w x tex_h texels from the top-left of the bound
  * texture. The step comes from the emitted (rounded) size, so the last
  * column never samples past tex_w. */
-static Gfx* mm_texrect_q(Gfx* gfx, int qx0, int qy0, int qx1, int qy1, f32 tex_w, f32 tex_h) {
+static Gfx* mm_texrect_q(Gfx* gfx, int qx0, int qy0, int qx1, int qy1, f32 tex_s, f32 tex_t, f32 tex_w,
+                         f32 tex_h) {
     int dsdx = (int)(tex_w * 4096.0f / (f32)(qx1 - qx0));
     int dtdy = (int)(tex_h * 4096.0f / (f32)(qy1 - qy0));
 
-    return gfx_gSPScisTextureRectangle1(gfx, qx0, qy0, qx1, qy1, G_TX_RENDERTILE, 0, 0, dsdx, dtdy);
+    /* s/t are S10.5 texel coordinates. */
+    return gfx_gSPScisTextureRectangle1(gfx, qx0, qy0, qx1, qy1, G_TX_RENDERTILE, (int)(tex_s * 32.0f),
+                                        (int)(tex_t * 32.0f), dsdx, dtdy);
 }
 
-static Gfx* mm_texrect(Gfx* gfx, f32 x0, f32 y0, f32 x1, f32 y1, f32 tex_w, f32 tex_h) {
-    return mm_texrect_q(gfx, mm_q(x0), mm_q(y0), mm_q(x1), mm_q(y1), tex_w, tex_h);
+static Gfx* mm_texrect(Gfx* gfx, f32 x0, f32 y0, f32 x1, f32 y1, f32 tex_s, f32 tex_t, f32 tex_w, f32 tex_h) {
+    return mm_texrect_q(gfx, mm_q(x0), mm_q(y0), mm_q(x1), mm_q(y1), tex_s, tex_t, tex_w, tex_h);
 }
 
 static Gfx* mm_mode(Gfx* gfx, u32 tlut) {
@@ -199,7 +204,7 @@ static Gfx* mm_icon(Gfx* gfx, const MMIcon* icon, f32 cx, f32 cy, f32 w, f32 h, 
 
         if (hw < 1) hw = 1;
         if (hh < 1) hh = 1;
-        return mm_texrect_q(gfx, qcx - hw, qcy - hh, qcx + hw, qcy + hh, 16.0f, 16.0f);
+        return mm_texrect_q(gfx, qcx - hw, qcy - hh, qcx + hw, qcy + hh, 0.0f, 0.0f, 16.0f, 16.0f);
     }
 }
 
@@ -222,18 +227,16 @@ static Gfx* mm_dot(Gfx* gfx, f32 cx, f32 cy, f32 d, f32 ring, f32 xs, const u8* 
     return mm_icon(gfx, &dot, cx, cy, d * xs, d, alpha);
 }
 
-static int mm_is_villager(mActor_name_t npc_id) {
-    int i;
+/* Index of the resident behind an NPC actor (event villagers included,
+ * see mNpc_SetNpcinfo), or -1 for other NPCs. */
+static int mm_villager_idx(NPC_ACTOR* npc_actor) {
+    mNpc_NpcList_c* list = npc_actor->npc_info.list;
+    mNpc_NpcList_c* first = Common_GetPointer(npclist[0]);
 
-    for (i = 0; i < ANIMAL_NUM_MAX; i++) {
-        Animal_c* animal = Save_GetPointer(animals[i]);
-
-        if (!mNpc_CheckFreeAnimalInfo(animal) && animal->id.npc_id == npc_id) {
-            return TRUE;
-        }
+    if (list != NULL && list >= first && list < first + ANIMAL_NUM_MAX) {
+        return (int)(list - first);
     }
-
-    return FALSE;
+    return -1;
 }
 
 /* World position -> map units (acres from the top-left of row A). */
@@ -357,7 +360,7 @@ void pc_minimap_draw(GAME_PLAY* play) {
         gDPSetTextureImage_Dolphin(gfx++, G_IM_FMT_CI, G_IM_SIZ_4b, 32, 32, s_map->map_texture[i]);
         gDPSetTile_Dolphin(gfx++, G_DOLPHIN_TLUT_DEFAULT_MODE, G_TX_RENDERTILE, 15, GX_CLAMP, GX_CLAMP, 0, 0);
         gfx = mm_texrect(gfx, x0 + fx * tile_w, y0 + fz * tile_h, x0 + (fx + 1) * tile_w, y0 + (fz + 1) * tile_h,
-                         MM_ACRE_TEXELS, MM_ACRE_TEXELS);
+                         MM_ACRE_TEXEL_START, MM_ACRE_TEXEL_START, MM_ACRE_TEXELS, MM_ACRE_TEXELS);
     }
 
     /* The acre art already shows every building (each building acre has its
@@ -397,30 +400,45 @@ void pc_minimap_draw(GAME_PLAY* play) {
         gfx = mm_icon(gfx, &my_home_icon, x0 + u * tile_w, y0 + v * tile_h, icon * xs, icon, alpha);
     }
 
-    /* NPCs around the player (the game only runs the ones near the
-     * player, so those are the ones with a live position). */
+    /* NPC dots. The game only keeps the NPCs near the player loaded and
+     * running; those get a live dot. Villagers further away are frozen
+     * where they were last unloaded (mNpc_RenewalSetNpc stores that in
+     * npclist[].position), shown as a faded dot until they load again. */
     if (g_pc_settings.minimap_npcs) {
+        u32 loaded = 0;
+
+        /* Every NPC-part actor is an NPC_ACTOR (constructed once ct_proc is
+         * cleared). Note which residents are loaded, hidden ones included
+         * (villagers at home or asleep stay loaded, hidden on their house). */
         for (npc = play->actor_info.list[ACTOR_PART_NPC].actor; npc != NULL; npc = npc->next_actor) {
-            /* Every NPC-part actor is an NPC_ACTOR. Skip ones not built yet
-             * and hidden ones (villagers at home or asleep stay loaded but
-             * hidden on their house), as the game's own draw does. */
+            int idx;
+
+            if (npc->ct_proc == NULL && (idx = mm_villager_idx((NPC_ACTOR*)npc)) >= 0) {
+                loaded |= 1u << idx;
+            }
+        }
+
+        /* Faded dots first, so live ones stay on top. */
+        for (i = 0; i < ANIMAL_NUM_MAX; i++) {
+            if (((loaded >> i) & 1) || mNpc_CheckFreeAnimalInfo(Save_GetPointer(animals[i])) ||
+                !mm_world_to_map(Common_GetPointer(npclist[i].position), &u, &v)) {
+                continue;
+            }
+
+            gfx = mm_dot(gfx, x0 + u * tile_w, y0 + v * tile_h, tile_h * 0.2f, tile_h * 0.09f, xs, villager_fill,
+                         dark, (int)(alpha * 0.45f));
+        }
+
+        for (npc = play->actor_info.list[ACTOR_PART_NPC].actor; npc != NULL; npc = npc->next_actor) {
             NPC_ACTOR* npc_actor = (NPC_ACTOR*)npc;
-            mActor_name_t name;
 
             if (npc->ct_proc != NULL || npc_actor->condition_info.hide_flg ||
                 (npc->state_bitfield & ACTOR_STATE_INVISIBLE) || !mm_world_to_map(&npc->world.position, &u, &v)) {
                 continue;
             }
 
-            /* Event villagers spawn under an event id; npc_name is the
-             * resident behind it. */
-            name = npc_actor->npc_info.npc_name;
-            if (name == EMPTY_NO) {
-                name = npc->npc_id;
-            }
-
             gfx = mm_dot(gfx, x0 + u * tile_w, y0 + v * tile_h, tile_h * 0.2f, tile_h * 0.09f, xs,
-                         mm_is_villager(name) ? villager_fill : special_fill, dark, alpha);
+                         mm_villager_idx(npc_actor) >= 0 ? villager_fill : special_fill, dark, alpha);
         }
     }
 
