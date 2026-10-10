@@ -25,6 +25,7 @@ enum {
     ITEM_RESETTI,
     ITEM_SHOP_VISITOR,
     ITEM_BORDERLESS_ACRES,
+    ITEM_DASH_SPEED,
     ITEM_NES_ASPECT,
     ITEM_MASTER_VOLUME,
     ITEM_STICK_DEADZONE,
@@ -54,6 +55,7 @@ static const Item tab_gameplay_items[] = {
     { "Resetti",          ITEM_RESETTI,          0 },
     { "Shop upgrade",     ITEM_SHOP_VISITOR,     0 },
     { "Borderless acres", ITEM_BORDERLESS_ACRES, 0 },
+    { "Sprint speed",     ITEM_DASH_SPEED,       0 },
     { "NES aspect",       ITEM_NES_ASPECT,       0 },
 };
 
@@ -254,6 +256,7 @@ static void recompute_dirty(void) {
         (s_pending.disable_resetti  != g_pc_settings.disable_resetti) ||
         (s_pending.disable_shop_visitor_req != g_pc_settings.disable_shop_visitor_req) ||
         (s_pending.borderless_acres != g_pc_settings.borderless_acres) ||
+        (s_pending.dash_speed       != g_pc_settings.dash_speed) ||
         (s_pending.nes_aspect       != g_pc_settings.nes_aspect) ||
         (s_pending.master_volume    != g_pc_settings.master_volume) ||
         (s_pending.stick_deadzone   != g_pc_settings.stick_deadzone) ||
@@ -313,6 +316,12 @@ static void item_cycle(int id, int dir) {
         case ITEM_BORDERLESS_ACRES:
             s_pending.borderless_acres = !s_pending.borderless_acres;
             break;
+        case ITEM_DASH_SPEED: {
+            int v = s_pending.dash_speed + (dir > 0 ? 25 : -25);
+            if (v < 100) v = 100;
+            if (v > 200) v = 200;
+            s_pending.dash_speed = v;
+        } break;
         case ITEM_NES_ASPECT:
             s_pending.nes_aspect = !s_pending.nes_aspect;
             break;
@@ -383,6 +392,9 @@ static void item_format(int id, char* buf, size_t n) {
         case ITEM_BORDERLESS_ACRES:
             snprintf(buf, n, "%s", s_pending.borderless_acres ? "< On >" : "< Off >");
             break;
+        case ITEM_DASH_SPEED:
+            snprintf(buf, n, "< %d%% >", s_pending.dash_speed);
+            break;
         case ITEM_NES_ASPECT:
             snprintf(buf, n, "%s", s_pending.nes_aspect ? "< 4:3 >" : "< Stretch >");
             break;
@@ -418,6 +430,7 @@ static int item_changed(int id) {
         case ITEM_RESETTI:    return s_pending.disable_resetti  != g_pc_settings.disable_resetti;
         case ITEM_SHOP_VISITOR: return s_pending.disable_shop_visitor_req != g_pc_settings.disable_shop_visitor_req;
         case ITEM_BORDERLESS_ACRES: return s_pending.borderless_acres != g_pc_settings.borderless_acres;
+        case ITEM_DASH_SPEED:    return s_pending.dash_speed    != g_pc_settings.dash_speed;
         case ITEM_NES_ASPECT:    return s_pending.nes_aspect    != g_pc_settings.nes_aspect;
         case ITEM_MASTER_VOLUME: return s_pending.master_volume != g_pc_settings.master_volume;
         case ITEM_STICK_DEADZONE:  return s_pending.stick_deadzone  != g_pc_settings.stick_deadzone;

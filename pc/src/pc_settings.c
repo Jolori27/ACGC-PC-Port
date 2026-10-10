@@ -16,6 +16,7 @@ PCSettings g_pc_settings = {
     .disable_resetti = 0,
     .disable_shop_visitor_req = 0,
     .borderless_acres = 1,
+    .dash_speed = 100,
     .nes_aspect = 1,
     .master_volume = 100,
     .stick_deadzone = 12,
@@ -58,6 +59,9 @@ static const char* DEFAULT_SETTINGS =
     "\n"
     "# Borderless acres: 0 = original acre transitions (faster, draws less), 1 = continuous movement/camera\n"
     "borderless_acres = 1\n"
+    "\n"
+    "# Sprint speed (holding B) as a percentage of the original: 100-200\n"
+    "dash_speed = 100\n"
     "\n"
     "# NES emulator aspect ratio: 0 = stretch to fullscreen, 1 = 4:3 pillarbox\n"
     "nes_aspect = 1\n"
@@ -112,6 +116,8 @@ static void apply_setting(const char* key, const char* value) {
         if (val == 0 || val == 1) g_pc_settings.disable_shop_visitor_req = val;
     } else if (strcmp(key, "borderless_acres") == 0) {
         if (val == 0 || val == 1) g_pc_settings.borderless_acres = val;
+    } else if (strcmp(key, "dash_speed") == 0) {
+        if (val >= 100 && val <= 200) g_pc_settings.dash_speed = val;
     } else if (strcmp(key, "nes_aspect") == 0) {
         if (val == 0 || val == 1) g_pc_settings.nes_aspect = val;
     } else if (strcmp(key, "master_volume") == 0) {
@@ -196,6 +202,9 @@ void pc_settings_save(void) {
     fprintf(f, "\n");
     fprintf(f, "# Borderless acres: 0 = original acre transitions (faster, draws less), 1 = continuous movement/camera\n");
     fprintf(f, "borderless_acres = %d\n", g_pc_settings.borderless_acres);
+    fprintf(f, "\n");
+    fprintf(f, "# Sprint speed (holding B) as a percentage of the original: 100-200\n");
+    fprintf(f, "dash_speed = %d\n", g_pc_settings.dash_speed);
     fprintf(f, "\n");
     fprintf(f, "# NES emulator aspect ratio: 0 = stretch to fullscreen, 1 = 4:3 pillarbox\n");
     fprintf(f, "nes_aspect = %d\n", g_pc_settings.nes_aspect);

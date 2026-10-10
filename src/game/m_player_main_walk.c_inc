@@ -157,7 +157,13 @@ static void Player_actor_Movement_Walk(ACTOR* actor, GAME* game, f32* frame) {
     over_norm = Player_actor_Culc_over_speed_normalize_NoneZero(actor, &actor->world.position);
 
     if (Player_actor_CheckController_forDush()) {
+#ifdef TARGET_PC
+        /* Title demo keeps vanilla speed so the scripted walk stays on its path. */
+        f32 dash_scale = (mEv_CheckTitleDemo() <= 0) ? (f32)g_pc_settings.dash_speed / 100.0f : 1.0f;
+        movePR = (7.5f * dash_scale * movePR) / over_norm;
+#else
         movePR = (7.5f * movePR) / over_norm;
+#endif
     } else {
         movePR = (4.875f * movePR) / over_norm;
     }
