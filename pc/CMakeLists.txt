@@ -51,6 +51,19 @@ add_compile_options(
     -fwrapv
 )
 
+# Cross toolchains for 32-bit x86 (Ubuntu's i686-w64-mingw32-gcc defaults to
+# pentiumpro, gcc -m32 to i686) only have x87, where (s16)float compiles to
+# fistp: out-of-range values become -32768 instead of wrapping like on the
+# GameCube. Skeletal animation relies on that wrap
+# (cKF_SkeletonInfo_subRotInterpolation), so every joint between two negative
+# angles flips 180 degrees and characters fold in half. SSE2 (pentium4)
+# converts with cvttss2si, which wraps.
+include(CheckCCompilerFlag)
+check_c_compiler_flag(-march=pentium4 AC_HAS_MARCH_PENTIUM4)
+if(AC_HAS_MARCH_PENTIUM4)
+    add_compile_options(-march=pentium4)
+endif()
+
 # =============================================================================
 # Include paths
 # =============================================================================
