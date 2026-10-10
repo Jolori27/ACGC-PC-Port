@@ -8,7 +8,8 @@ extern "C" {
 
 struct game_play_s;
 
-/* Flip the minimap on/off and remember it in settings.ini. */
+/* Flip the minimap on/off for this session (the settings.ini value,
+ * set from the Map tab, is the default at launch). */
 void pc_minimap_toggle(void);
 
 /* FALSE while a text field, the settings menu or a non-game screen owns

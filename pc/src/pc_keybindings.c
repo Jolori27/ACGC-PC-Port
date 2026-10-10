@@ -307,7 +307,54 @@ void pc_keybindings_save(void) {
     printf("[Keybindings] Saved %s\n", KEYBINDINGS_FILE);
 }
 
+static int kb_code_used_by_game(PCInputCode code) {
+    for (int i = 0; i < (int)NUM_ENTRIES; i++) {
+        if (s_entries[i].offset == (int)offsetof(PCKeybindings, minimap)) continue;
+        if (*(PCInputCode*)((char*)&g_pc_keybindings + s_entries[i].offset) == code) return 1;
+    }
+    return 0;
+}
+
+static int pad_code_used_by_game(PCPadCode code) {
+    for (int i = 0; i < (int)NUM_PAD_ENTRIES; i++) {
+        if (s_pad_entries[i].offset == (int)offsetof(PCPadBindings, minimap)) continue;
+        if (*(PCPadCode*)((char*)&g_pc_padbindings + s_pad_entries[i].offset) == code) return 1;
+    }
+    return 0;
+}
+
+/* Minimap was added after keybindings.ini existed: an older file can
+ * already use its default (early builds had L on LB). The GameCube action
+ * keeps the key; Minimap moves to a free key, or is unbound on the pad.
+ * Returns 1 if a binding changed. */
+static int resolve_minimap_conflicts(void) {
+    static const PCInputCode kb_fallbacks[] = {
+        SDL_SCANCODE_TAB, SDL_SCANCODE_M, SDL_SCANCODE_N, SDL_SCANCODE_F1, SDL_SCANCODE_F2,
+    };
+    int changed = 0;
+
+    if (kb_code_used_by_game(g_pc_keybindings.minimap)) {
+        for (int i = 0; i < (int)(sizeof(kb_fallbacks) / sizeof(kb_fallbacks[0])); i++) {
+            if (!kb_code_used_by_game(kb_fallbacks[i])) {
+                g_pc_keybindings.minimap = kb_fallbacks[i];
+                changed = 1;
+                break;
+            }
+        }
+    }
+
+    if (g_pc_padbindings.minimap != PC_PAD_NONE && pad_code_used_by_game(g_pc_padbindings.minimap)) {
+        g_pc_padbindings.minimap = PC_PAD_NONE;
+        changed = 1;
+    }
+
+    return changed;
+}
+
 void pc_keybindings_load(void) {
+    int has_minimap = 0;
+    int has_pad_minimap = 0;
+
     pc_keybindings_reset_defaults();
 
     FILE* f = fopen(KEYBINDINGS_FILE, "r");
@@ -334,8 +381,15 @@ void pc_keybindings_load(void) {
 
         if (*key && *value) {
             apply_keybind(key, value);
+            if (strcmp(key, "Minimap") == 0) has_minimap = 1;
+            if (strcmp(key, "Pad_Minimap") == 0) has_pad_minimap = 1;
         }
     }
     fclose(f);
     printf("[Keybindings] Loaded %s\n", KEYBINDINGS_FILE);
+
+    /* Write back so an older file gains the Minimap lines (once). */
+    if (resolve_minimap_conflicts() || !has_minimap || !has_pad_minimap) {
+        pc_keybindings_save();
+    }
 }

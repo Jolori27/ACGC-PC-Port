@@ -73,7 +73,7 @@ static const char* DEFAULT_SETTINGS =
     "# Sprint speed (holding B) as a percentage of the original: 100-200\n"
     "dash_speed = 100\n"
     "\n"
-    "# Town minimap (toggle in game with the Minimap key, Tab / LB by default): 0 = hidden, 1 = shown\n"
+    "# Town minimap shown at launch (the Minimap key, Tab / LB by default, toggles it in game): 0 = no, 1 = yes\n"
     "minimap = 0\n"
     "\n"
     "# Minimap size: 0 = small, 1 = medium, 2 = large\n"
@@ -263,7 +263,7 @@ void pc_settings_save(void) {
     fprintf(f, "# Sprint speed (holding B) as a percentage of the original: 100-200\n");
     fprintf(f, "dash_speed = %d\n", g_pc_settings.dash_speed);
     fprintf(f, "\n");
-    fprintf(f, "# Town minimap (toggle in game with the Minimap key, Tab / LB by default): 0 = hidden, 1 = shown\n");
+    fprintf(f, "# Town minimap shown at launch (the Minimap key, Tab / LB by default, toggles it in game): 0 = no, 1 = yes\n");
     fprintf(f, "minimap = %d\n", g_pc_settings.minimap);
     fprintf(f, "\n");
     fprintf(f, "# Minimap size: 0 = small, 1 = medium, 2 = large\n");

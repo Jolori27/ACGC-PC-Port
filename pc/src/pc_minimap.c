@@ -61,14 +61,16 @@ static f32 s_refresh_timer = 0.0f;
 static Mtx s_ortho;
 static int s_ortho_ready = FALSE;
 
+/* Session toggle only: rewriting settings.ini on a gameplay key would
+ * clobber edits made while the game runs. The Map tab's Minimap setting
+ * (saved on Apply) is the default at launch. */
 void pc_minimap_toggle(void) {
     g_pc_settings.minimap = !g_pc_settings.minimap;
-    pc_settings_save();
 }
 
 int pc_minimap_toggle_allowed(void) {
     return !pc_settings_menu_active() && !g_pc_typing_mode && !g_pc_editor_active &&
-           !g_pc_nes_active && !g_pc_title_main_menu_visible;
+           !g_pc_nes_active && !g_pc_title_main_menu_visible && !g_pc_model_viewer;
 }
 
 /* Outdoors in the town field (not the island, title demo or intro) with
