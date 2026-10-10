@@ -2,9 +2,9 @@
  *
  * Reuses the in-game map screen's acre art (rivers, cliffs, beach and the
  * buildings are drawn into each acre tile, see m_map_ovl.c) and shows it in
- * a screen corner while walking around town, with villager house roofs, the
- * player's own house, the dump (the only building missing from the art),
- * a dot for the player and optional dots for the NPCs around. Toggled with
+ * a screen corner while walking around town, with villager house roofs (the
+ * only thing the map screen draws over the art), the player's own house, a
+ * dot for the player and optional dots for the NPCs around. Toggled with
  * the Minimap key (keybindings.ini, Tab / LB by default); size, corner and
  * NPC dots live in settings.ini and the Map settings tab.
  *
@@ -36,12 +36,12 @@
 #include "m_private.h"
 #include "m_scene_table.h"
 #include "m_rcp.h"
+#include "ac_npc.h"
 #include "gfxalloc.h"
 #include "graph.h"
 
 #include <math.h>
 
-extern u8 kan_win_gomi_tex[];
 extern u8 kan_win_yane_tex[];
 extern u8 kan_win_ply_tex[];
 
@@ -134,14 +134,19 @@ static int mm_q(f32 v) {
     return (int)(v * 4.0f + 0.5f);
 }
 
-/* Texture rectangle in 320x240 stretch space showing tex_w x tex_h texels
- * from the top-left of the bound texture. */
-static Gfx* mm_texrect(Gfx* gfx, f32 x0, f32 y0, f32 x1, f32 y1, f32 tex_w, f32 tex_h) {
-    int dsdx = (int)((tex_w / (x1 - x0)) * 1024.0f);
-    int dtdy = (int)((tex_h / (y1 - y0)) * 1024.0f);
+/* Texture rectangle with edges in quarter units of the 320x240 stretch
+ * space, showing tex_w x tex_h texels from the top-left of the bound
+ * texture. The step comes from the emitted (rounded) size, so the last
+ * column never samples past tex_w. */
+static Gfx* mm_texrect_q(Gfx* gfx, int qx0, int qy0, int qx1, int qy1, f32 tex_w, f32 tex_h) {
+    int dsdx = (int)(tex_w * 4096.0f / (f32)(qx1 - qx0));
+    int dtdy = (int)(tex_h * 4096.0f / (f32)(qy1 - qy0));
 
-    return gfx_gSPScisTextureRectangle1(gfx, mm_q(x0), mm_q(y0), mm_q(x1), mm_q(y1), G_TX_RENDERTILE, 0, 0, dsdx,
-                                        dtdy);
+    return gfx_gSPScisTextureRectangle1(gfx, qx0, qy0, qx1, qy1, G_TX_RENDERTILE, 0, 0, dsdx, dtdy);
+}
+
+static Gfx* mm_texrect(Gfx* gfx, f32 x0, f32 y0, f32 x1, f32 y1, f32 tex_w, f32 tex_h) {
+    return mm_texrect_q(gfx, mm_q(x0), mm_q(y0), mm_q(x1), mm_q(y1), tex_w, tex_h);
 }
 
 static Gfx* mm_mode(Gfx* gfx, u32 tlut) {
@@ -183,7 +188,19 @@ static Gfx* mm_icon(Gfx* gfx, const MMIcon* icon, f32 cx, f32 cy, f32 w, f32 h, 
     }
     gDPSetPrimColor(gfx++, 0, 255, icon->prim[0], icon->prim[1], icon->prim[2], alpha);
     gDPSetTile_Dolphin(gfx++, G_DOLPHIN_TLUT_DEFAULT_MODE, G_TX_RENDERTILE, 0, GX_CLAMP, GX_CLAMP, 0, 0);
-    return mm_texrect(gfx, cx - w * 0.5f, cy - h * 0.5f, cx + w * 0.5f, cy + h * 0.5f, 16.0f, 16.0f);
+
+    /* Round the centre and the half size once, so a moving icon keeps its
+     * size and stacked icons (dot ring + fill) stay concentric. */
+    {
+        int qcx = mm_q(cx);
+        int qcy = mm_q(cy);
+        int hw = (int)(w * 2.0f + 0.5f);
+        int hh = (int)(h * 2.0f + 0.5f);
+
+        if (hw < 1) hw = 1;
+        if (hh < 1) hh = 1;
+        return mm_texrect_q(gfx, qcx - hw, qcy - hh, qcx + hw, qcy + hh, 16.0f, 16.0f);
+    }
 }
 
 /* Round dot with an outline ring, d = inner diameter in screen units. */
@@ -203,27 +220,6 @@ static Gfx* mm_dot(Gfx* gfx, f32 cx, f32 cy, f32 d, f32 ring, f32 xs, const u8* 
     dot.prim[1] = fill[1];
     dot.prim[2] = fill[2];
     return mm_icon(gfx, &dot, cx, cy, d * xs, d, alpha);
-}
-
-/* Where the dump sits inside its acre, in acre units (0..1); the acre
- * centre if the structure isn't found in the FG layer. */
-static void mm_dump_pos(int fx, int fz, f32* u, f32* v) {
-    mFM_fg_c* fg = Save_GetPointer(fg[fz][fx]);
-    int ut_x;
-    int ut_z;
-
-    for (ut_z = 0; ut_z < UT_Z_NUM; ut_z++) {
-        for (ut_x = 0; ut_x < UT_X_NUM; ut_x++) {
-            if (fg->items[ut_z][ut_x] == DUMP) {
-                *u = ((f32)ut_x + 0.5f) / (f32)UT_X_NUM;
-                *v = ((f32)ut_z + 0.5f) / (f32)UT_Z_NUM;
-                return;
-            }
-        }
-    }
-
-    *u = 0.5f;
-    *v = 0.5f;
 }
 
 static int mm_is_villager(mActor_name_t npc_id) {
@@ -251,7 +247,6 @@ void pc_minimap_draw(GAME_PLAY* play) {
     static const f32 tile_sizes[3] = { 12.0f, 16.0f, 21.0f };
     static const s16 home_x[PLAYER_NUM] = { 2128, 2352, 2128, 2352 };
     static const s16 home_z[PLAYER_NUM] = { 1488, 1488, 1768, 1768 };
-    static const MMIcon dump_icon = { kan_win_gomi_tex, FALSE, { 190, 70, 60 }, { 0, 0, 0 } };
     static const MMIcon my_home_icon = { kan_win_ply_tex, TRUE, { 230, 90, 50 }, { 255, 235, 120 } };
     /* Villager roof colours by cliff layer (kan_win_npc2T_*_model). */
     static const u8 roof_prim[3][3] = { { 90, 90, 225 }, { 145, 70, 205 }, { 170, 115, 20 } };
@@ -365,19 +360,10 @@ void pc_minimap_draw(GAME_PLAY* play) {
                          MM_ACRE_TEXELS, MM_ACRE_TEXELS);
     }
 
-    /* The acre art already shows every building except the dump. */
+    /* The acre art already shows every building (each building acre has its
+     * own tile, the dump included), so like the map screen only villager
+     * houses go on top. The house sits one unit above home_info.ut_z. */
     gfx = mm_mode(gfx, G_TT_NONE);
-    for (i = 0; i < FG_BLOCK_TOTAL_NUM; i++) {
-        int fx = i % FG_BLOCK_X_NUM;
-        int fz = i / FG_BLOCK_X_NUM;
-
-        if (s_map->label_info[fz][fx].label_no == mMP_LABEL_JUNK) {
-            mm_dump_pos(fx, fz, &u, &v);
-            gfx = mm_icon(gfx, &dump_icon, x0 + (fx + u) * tile_w, y0 + (fz + v) * tile_h, icon * xs, icon, alpha);
-        }
-    }
-
-    /* Villager houses (the house sits one unit above home_info.ut_z). */
     for (i = 0; i < ANIMAL_NUM_MAX; i++) {
         Animal_c* animal = Save_GetPointer(animals[i]);
         Anmhome_c* home = &animal->home_info;
@@ -415,12 +401,26 @@ void pc_minimap_draw(GAME_PLAY* play) {
      * player, so those are the ones with a live position). */
     if (g_pc_settings.minimap_npcs) {
         for (npc = play->actor_info.list[ACTOR_PART_NPC].actor; npc != NULL; npc = npc->next_actor) {
-            if ((npc->state_bitfield & ACTOR_STATE_INVISIBLE) || !mm_world_to_map(&npc->world.position, &u, &v)) {
+            /* Every NPC-part actor is an NPC_ACTOR. Skip ones not built yet
+             * and hidden ones (villagers at home or asleep stay loaded but
+             * hidden on their house), as the game's own draw does. */
+            NPC_ACTOR* npc_actor = (NPC_ACTOR*)npc;
+            mActor_name_t name;
+
+            if (npc->ct_proc != NULL || npc_actor->condition_info.hide_flg ||
+                (npc->state_bitfield & ACTOR_STATE_INVISIBLE) || !mm_world_to_map(&npc->world.position, &u, &v)) {
                 continue;
             }
 
+            /* Event villagers spawn under an event id; npc_name is the
+             * resident behind it. */
+            name = npc_actor->npc_info.npc_name;
+            if (name == EMPTY_NO) {
+                name = npc->npc_id;
+            }
+
             gfx = mm_dot(gfx, x0 + u * tile_w, y0 + v * tile_h, tile_h * 0.2f, tile_h * 0.09f, xs,
-                         mm_is_villager(npc->npc_id) ? villager_fill : special_fill, dark, alpha);
+                         mm_is_villager(name) ? villager_fill : special_fill, dark, alpha);
         }
     }
 
