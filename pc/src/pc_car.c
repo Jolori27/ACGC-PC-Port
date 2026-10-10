@@ -154,11 +154,13 @@ static Gfx pc_car_mirror_inner[] = {
     gsDPSetPrimColor(0, 128, 255, 255, 255, 255),
     gsSPLoadGeometryMode(PC_CAR_MIRROR_GEOMETRY),
     gsSPVertex(&obj_s_car_v[80], 30, 0),
-    gsSPNTrianglesInit_5b(18, 0, 1, 2, 0, 2, 3, 4, 5, 6),
+    /* The last two triangles of the original list (the steering wheel,
+     * vertices 106..109) are left out: one wheel, on the driver's side. */
+    gsSPNTrianglesInit_5b(16, 0, 1, 2, 0, 2, 3, 4, 5, 6),
     gsSPNTriangles_5b(4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14),
     gsSPNTriangles_5b(12, 15, 13, 15, 16, 13, 17, 18, 15, 17, 15, 12),
     gsSPNTriangles_5b(19, 20, 21, 22, 19, 21, 22, 21, 23, 24, 25, 18),
-    gsSPNTriangles_5b(24, 18, 17, 26, 27, 28, 26, 28, 29, 0, 0, 0),
+    gsSPNTriangles_5b(24, 18, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0),
     gsSPEndDisplayList(),
 };
 

@@ -16,12 +16,14 @@ struct game_s;
 
 /* Car-aligned model space: the model is authored rotated 45 degrees; after
  * undoing that, +Z is the hood and +X the side that has wheels modelled.
- * The seat is where the player's root sits while driving: centred on the
- * two bucket seats' cushion (Y 1500..1875 over Z -1312..+1125), in front of
- * the reclined backrest that rises behind it to Z -4875. */
+ * The seat anchor is the player's position while driving. The riding pose
+ * (mPlayer_ANIM_RIDEWAIT) puts the hips 2096 up and 1700 back from it, and
+ * the car is drawn PC_CAR_WHEEL_BOTTOM higher, so the hips end up at
+ * (SEAT_X, SEAT_Y + 1752, SEAT_Z - 1700): here on the two bucket seats'
+ * cushion (Y 1500..1875 over Z -1312..+1125), close to the windshield. */
 #define PC_CAR_SEAT_X 0.0f
-#define PC_CAR_SEAT_Y 2000.0f
-#define PC_CAR_SEAT_Z (-450.0f)
+#define PC_CAR_SEAT_Y 600.0f
+#define PC_CAR_SEAT_Z 950.0f
 
 /* Car body box in car-aligned model units (from the vertex data). */
 #define PC_CAR_BOX_X_MIN (-3750.0f)
