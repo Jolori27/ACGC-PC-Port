@@ -30,6 +30,7 @@ enum {
     ITEM_MINIMAP,
     ITEM_MINIMAP_SIZE,
     ITEM_MINIMAP_CORNER,
+    ITEM_MINIMAP_NPCS,
     ITEM_QUICK_START,
     ITEM_MASTER_VOLUME,
     ITEM_STICK_DEADZONE,
@@ -68,6 +69,7 @@ static const Item tab_map_items[] = {
     { "Minimap",        ITEM_MINIMAP,        0 },
     { "Size",           ITEM_MINIMAP_SIZE,   0 },
     { "Corner",         ITEM_MINIMAP_CORNER, 0 },
+    { "NPCs",           ITEM_MINIMAP_NPCS,   0 },
 };
 
 static const Item tab_audio_items[] = {
@@ -274,6 +276,7 @@ static void recompute_dirty(void) {
         (s_pending.minimap          != g_pc_settings.minimap) ||
         (s_pending.minimap_size     != g_pc_settings.minimap_size) ||
         (s_pending.minimap_corner   != g_pc_settings.minimap_corner) ||
+        (s_pending.minimap_npcs     != g_pc_settings.minimap_npcs) ||
         (s_pending.quick_start      != g_pc_settings.quick_start) ||
         (s_pending.master_volume    != g_pc_settings.master_volume) ||
         (s_pending.stick_deadzone   != g_pc_settings.stick_deadzone) ||
@@ -350,6 +353,9 @@ static void item_cycle(int id, int dir) {
             break;
         case ITEM_MINIMAP_CORNER:
             s_pending.minimap_corner = !s_pending.minimap_corner;
+            break;
+        case ITEM_MINIMAP_NPCS:
+            s_pending.minimap_npcs = !s_pending.minimap_npcs;
             break;
         case ITEM_QUICK_START:
             s_pending.quick_start = !s_pending.quick_start;
@@ -439,6 +445,9 @@ static void item_format(int id, char* buf, size_t n) {
         case ITEM_MINIMAP_CORNER:
             snprintf(buf, n, "%s", s_pending.minimap_corner ? "< Top left >" : "< Top right >");
             break;
+        case ITEM_MINIMAP_NPCS:
+            snprintf(buf, n, "%s", s_pending.minimap_npcs ? "< On >" : "< Off >");
+            break;
         case ITEM_QUICK_START:
             snprintf(buf, n, "%s", s_pending.quick_start ? "< On >" : "< Off >");
             break;
@@ -479,6 +488,7 @@ static int item_changed(int id) {
         case ITEM_MINIMAP:       return s_pending.minimap       != g_pc_settings.minimap;
         case ITEM_MINIMAP_SIZE:  return s_pending.minimap_size  != g_pc_settings.minimap_size;
         case ITEM_MINIMAP_CORNER: return s_pending.minimap_corner != g_pc_settings.minimap_corner;
+        case ITEM_MINIMAP_NPCS:  return s_pending.minimap_npcs  != g_pc_settings.minimap_npcs;
         case ITEM_QUICK_START:   return s_pending.quick_start   != g_pc_settings.quick_start;
         case ITEM_MASTER_VOLUME: return s_pending.master_volume != g_pc_settings.master_volume;
         case ITEM_STICK_DEADZONE:  return s_pending.stick_deadzone  != g_pc_settings.stick_deadzone;

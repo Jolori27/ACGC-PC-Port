@@ -21,6 +21,7 @@ typedef struct {
     int minimap;          /* Town minimap HUD: 0=hidden, 1=shown (default at launch; the Minimap key toggles it) */
     int minimap_size;     /* 0=small, 1=medium, 2=large */
     int minimap_corner;   /* 0=top right, 1=top left */
+    int minimap_npcs;     /* Minimap dots for the NPCs around the player: 0=off, 1=on */
     int nes_aspect;       /* NES emulator aspect: 0=fullscreen stretch, 1=4:3 pillarbox (default) */
     int master_volume;    /* Applied at the PC audio output, 0-100 (default 100) */
     int stick_deadzone;   /* Gamepad main stick deadzone, percent 0-40 (default 12) */

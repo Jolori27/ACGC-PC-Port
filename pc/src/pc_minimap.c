@@ -1,17 +1,19 @@
 /* pc_minimap.c - town minimap HUD.
  *
- * Reuses the in-game map screen's art (acre tiles with the buildings drawn
- * in, building and house icons, see m_map_ovl.c) and shows it in a screen
- * corner while walking around town, with an arrow for the player. Toggled
- * with the Minimap key (keybindings.ini, Tab / LB by default); size and
- * corner live in settings.ini.
+ * Reuses the in-game map screen's acre art (rivers, cliffs, beach and the
+ * buildings are drawn into each acre tile, see m_map_ovl.c) and shows it in
+ * a screen corner while walking around town, with villager house roofs, the
+ * player's own house, the dump (the only building missing from the art),
+ * a dot for the player and optional dots for the NPCs around. Toggled with
+ * the Minimap key (keybindings.ini, Tab / LB by default); size, corner and
+ * NPC dots live in settings.ini and the Map settings tab.
  *
- * Everything is emitted as texture rectangles plus one triangle, into a
- * sub-list called from FONT_DISP (same layer as the clock), so it sits
- * above the 3D world and under fades, the pause menu and the menu
- * backdrop capture. The widescreen stretch tag maps 0..320 to the whole
- * window so the minimap hugs the real window corner; widths are scaled by
- * the aspect factor to keep tiles square. */
+ * Everything is emitted as texture rectangles into a sub-list called from
+ * FONT_DISP (same layer as the clock), so it sits above the 3D world and
+ * under fades, the pause menu and the menu backdrop capture. The widescreen
+ * stretch tag maps 0..320 to the whole window so the minimap hugs the real
+ * window corner; widths are scaled by the aspect factor to keep tiles
+ * square. */
 #include "pc_minimap.h"
 #include "pc_platform.h"
 #include "pc_settings.h"
@@ -34,32 +36,31 @@
 #include "m_private.h"
 #include "m_scene_table.h"
 #include "m_rcp.h"
-#include "m_font.h"
-#include "m_lib.h"
 #include "gfxalloc.h"
 #include "graph.h"
-#include "sys_matrix.h"
 
-extern u8 kan_win_omise_tex[];
-extern u8 kan_win_kouban_tex[];
-extern u8 kan_win_yubin_tex[];
-extern u8 kan_win_yashiro_tex[];
+#include <math.h>
+
 extern u8 kan_win_gomi_tex[];
-extern u8 kan_win_mu_tex[];
-extern u8 kan_win_ta_tex[];
-extern u8 kan_win_eki_tex[];
-extern u8 kan_win_fune_tex[];
 extern u8 kan_win_yane_tex[];
 extern u8 kan_win_ply_tex[];
 
 #define MM_TEX_FULL_ALPHA 235 /* overall opacity, out of 255 */
 #define MM_REFRESH_FRAMES 30.0f
 
+/* The acre art fills the top-left 22x22 texels of each 32x32 tile (the map
+ * screen places tiles 22 units apart); the rest is transparent. Bilinear
+ * sampling starts half a texel in, so spanning 21 texels stays inside the
+ * art and neighbouring tiles join without a seam. */
+#define MM_ACRE_TEXELS 21.0f
+
 static const mMP_Ovl_c* s_map = NULL;
-static f32 s_alpha = 0.0f;         /* 0..1, fades on toggle */
+static f32 s_alpha = 0.0f; /* 0..1, fades on toggle */
 static f32 s_refresh_timer = 0.0f;
-static Mtx s_ortho;
-static int s_ortho_ready = FALSE;
+
+/* 16x16 I4 disc for the player and NPC dots, built on first use. */
+static u8 s_dot_tex[16 * 16 / 2] ATTRIBUTE_ALIGN(32);
+static int s_dot_ready = FALSE;
 
 /* Session toggle only: rewriting settings.ini on a gameplay key would
  * clobber edits made while the game runs. The Map tab's Minimap setting
@@ -101,15 +102,43 @@ static int mm_screen_busy(GAME_PLAY* play) {
            player->address_able_display == mPlayer_ADDRESSABLE_FALSE_TALKING;
 }
 
+/* GX I4 texture: 8x8 texel blocks, two texels per byte (high nibble
+ * first). Full intensity inside radius 6.5, fading out by 7.5. */
+static void mm_make_dot_tex(void) {
+    int x;
+    int y;
+
+    for (y = 0; y < 16; y++) {
+        for (x = 0; x < 16; x++) {
+            f32 dx = (f32)x + 0.5f - 8.0f;
+            f32 dy = (f32)y + 0.5f - 8.0f;
+            f32 cov = 7.5f - sqrtf(dx * dx + dy * dy);
+            int level;
+            int texel = (y % 8) * 8 + (x % 8);
+            u8* p = &s_dot_tex[((y / 8) * 2 + (x / 8)) * 32 + texel / 2];
+
+            if (cov < 0.0f) cov = 0.0f;
+            if (cov > 1.0f) cov = 1.0f;
+            level = (int)(cov * 15.0f + 0.5f);
+
+            if (texel & 1) {
+                *p = (u8)((*p & 0xF0) | level);
+            } else {
+                *p = (u8)((*p & 0x0F) | (level << 4));
+            }
+        }
+    }
+}
+
 static int mm_q(f32 v) {
     return (int)(v * 4.0f + 0.5f);
 }
 
-/* Texture rectangle in 320x240 stretch space; texels are the full
- * tex_w x tex_h image. */
-static Gfx* mm_texrect(Gfx* gfx, f32 x0, f32 y0, f32 x1, f32 y1, int tex_w, int tex_h) {
-    int dsdx = (int)(((f32)tex_w / (x1 - x0)) * 1024.0f);
-    int dtdy = (int)(((f32)tex_h / (y1 - y0)) * 1024.0f);
+/* Texture rectangle in 320x240 stretch space showing tex_w x tex_h texels
+ * from the top-left of the bound texture. */
+static Gfx* mm_texrect(Gfx* gfx, f32 x0, f32 y0, f32 x1, f32 y1, f32 tex_w, f32 tex_h) {
+    int dsdx = (int)((tex_w / (x1 - x0)) * 1024.0f);
+    int dtdy = (int)((tex_h / (y1 - y0)) * 1024.0f);
 
     return gfx_gSPScisTextureRectangle1(gfx, mm_q(x0), mm_q(y0), mm_q(x1), mm_q(y1), G_TX_RENDERTILE, 0, 0, dsdx,
                                         dtdy);
@@ -154,53 +183,38 @@ static Gfx* mm_icon(Gfx* gfx, const MMIcon* icon, f32 cx, f32 cy, f32 w, f32 h, 
     }
     gDPSetPrimColor(gfx++, 0, 255, icon->prim[0], icon->prim[1], icon->prim[2], alpha);
     gDPSetTile_Dolphin(gfx++, G_DOLPHIN_TLUT_DEFAULT_MODE, G_TX_RENDERTILE, 0, GX_CLAMP, GX_CLAMP, 0, 0);
-    return mm_texrect(gfx, cx - w * 0.5f, cy - h * 0.5f, cx + w * 0.5f, cy + h * 0.5f, 16, 16);
+    return mm_texrect(gfx, cx - w * 0.5f, cy - h * 0.5f, cx + w * 0.5f, cy + h * 0.5f, 16.0f, 16.0f);
 }
 
-/* Colours from the map screen's models (kan_hyouji2.c, kan_eki.c, ...). */
-static const MMIcon mm_building_icons[mMP_LABEL_NUM] = {
-    /* mMP_LABEL_NPC, mMP_LABEL_PLAYER: drawn per house below */
-    { NULL, 0, { 0, 0, 0 }, { 0, 0, 0 } },
-    { NULL, 0, { 0, 0, 0 }, { 0, 0, 0 } },
-    { kan_win_omise_tex, FALSE, { 195, 80, 45 }, { 0, 0, 0 } },        /* shop */
-    { kan_win_kouban_tex, FALSE, { 195, 80, 45 }, { 0, 0, 0 } },       /* police */
-    { kan_win_yubin_tex, FALSE, { 190, 70, 60 }, { 0, 0, 0 } },        /* post office */
-    { kan_win_yashiro_tex, FALSE, { 190, 70, 60 }, { 0, 0, 0 } },      /* wishing well */
-    { kan_win_eki_tex, TRUE, { 255, 255, 255 }, { 100, 100, 100 } },   /* station */
-    { kan_win_gomi_tex, FALSE, { 190, 70, 60 }, { 0, 0, 0 } },         /* dump */
-    { kan_win_mu_tex, FALSE, { 190, 70, 60 }, { 0, 0, 0 } },           /* museum */
-    { kan_win_ta_tex, FALSE, { 190, 70, 60 }, { 0, 0, 0 } },           /* tailor */
-    { kan_win_fune_tex, TRUE, { 255, 255, 255 }, { 100, 100, 100 } },  /* dock */
-};
+/* Round dot with an outline ring, d = inner diameter in screen units. */
+static Gfx* mm_dot(Gfx* gfx, f32 cx, f32 cy, f32 d, f32 ring, f32 xs, const u8* fill, const u8* edge, int alpha) {
+    MMIcon dot;
 
-/* Villager roof colours by cliff layer (kan_win_npc2T_*_model). */
-static const u8 mm_roof_prim[3][3] = { { 90, 90, 225 }, { 145, 70, 205 }, { 170, 115, 20 } };
+    dot.tex = s_dot_tex;
+    dot.ia8 = FALSE;
+    dot.env[0] = dot.env[1] = dot.env[2] = 0;
 
-static int mm_label_matches(int label, mActor_name_t item) {
-    switch (label) {
-        case mMP_LABEL_SHOP:    return item >= SHOP0 && item <= SHOP3;
-        case mMP_LABEL_POLICE:  return item == POLICE_STATION;
-        case mMP_LABEL_POST:    return item == POST_OFFICE;
-        case mMP_LABEL_SHRINE:  return item == WISHING_WELL;
-        case mMP_LABEL_STATION: return item == TRAIN_STATION;
-        case mMP_LABEL_JUNK:    return item == DUMP;
-        case mMP_LABEL_MUSEUM:  return item == MUSEUM;
-        case mMP_LABEL_NEEDLE:  return item == NEEDLEWORK_SHOP;
-        case mMP_LABEL_PORT:    return item == BOAT || item == PORT_SIGN;
-    }
-    return FALSE;
+    dot.prim[0] = edge[0];
+    dot.prim[1] = edge[1];
+    dot.prim[2] = edge[2];
+    gfx = mm_icon(gfx, &dot, cx, cy, (d + ring) * xs, d + ring, alpha);
+
+    dot.prim[0] = fill[0];
+    dot.prim[1] = fill[1];
+    dot.prim[2] = fill[2];
+    return mm_icon(gfx, &dot, cx, cy, d * xs, d, alpha);
 }
 
-/* Position of an acre's building inside the acre, in acre units (0..1).
- * Falls back to the acre centre when the structure isn't in the FG layer. */
-static void mm_building_pos(int label, int fx, int fz, f32* u, f32* v) {
+/* Where the dump sits inside its acre, in acre units (0..1); the acre
+ * centre if the structure isn't found in the FG layer. */
+static void mm_dump_pos(int fx, int fz, f32* u, f32* v) {
     mFM_fg_c* fg = Save_GetPointer(fg[fz][fx]);
     int ut_x;
     int ut_z;
 
     for (ut_z = 0; ut_z < UT_Z_NUM; ut_z++) {
         for (ut_x = 0; ut_x < UT_X_NUM; ut_x++) {
-            if (mm_label_matches(label, fg->items[ut_z][ut_x])) {
+            if (fg->items[ut_z][ut_x] == DUMP) {
                 *u = ((f32)ut_x + 0.5f) / (f32)UT_X_NUM;
                 *v = ((f32)ut_z + 0.5f) / (f32)UT_Z_NUM;
                 return;
@@ -212,49 +226,45 @@ static void mm_building_pos(int label, int fx, int fz, f32* u, f32* v) {
     *v = 0.5f;
 }
 
-static void mm_set_vtx(Vtx* vtx, f32 x, f32 y) {
-    vtx->v.ob[0] = (s16)((x - 160.0f) * mFont_SCALE_F);
-    vtx->v.ob[1] = (s16)((120.0f - y) * mFont_SCALE_F);
-    vtx->v.ob[2] = 0;
-    vtx->v.flag = 1;
-    vtx->v.tc[0] = 0;
-    vtx->v.tc[1] = 0;
-    vtx->v.cn[0] = 255;
-    vtx->v.cn[1] = 255;
-    vtx->v.cn[2] = 255;
-    vtx->v.cn[3] = 255;
+static int mm_is_villager(mActor_name_t npc_id) {
+    int i;
+
+    for (i = 0; i < ANIMAL_NUM_MAX; i++) {
+        Animal_c* animal = Save_GetPointer(animals[i]);
+
+        if (!mNpc_CheckFreeAnimalInfo(animal) && animal->id.npc_id == npc_id) {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
 }
 
-/* Arrow pointing where the player faces: angle 0 faces south (down on
- * the map), 0x4000 east. xs squeezes x to undo the widescreen stretch. */
-static Gfx* mm_arrow(Gfx* gfx, Vtx* vtx, f32 cx, f32 cy, s16 angle, f32 size, f32 xs, int r, int g, int b, int a) {
-    f32 dx = sin_s(angle);
-    f32 dy = cos_s(angle);
-    f32 px = -dy;
-    f32 py = dx;
-
-    mm_set_vtx(&vtx[0], cx + dx * size * xs, cy + dy * size);
-    mm_set_vtx(&vtx[1], cx + (-dx * 0.6f + px * 0.7f) * size * xs, cy + (-dy * 0.6f + py * 0.7f) * size);
-    mm_set_vtx(&vtx[2], cx + (-dx * 0.6f - px * 0.7f) * size * xs, cy + (-dy * 0.6f - py * 0.7f) * size);
-
-    gDPPipeSync(gfx++);
-    gDPSetPrimColor(gfx++, 0, 0, r, g, b, a);
-    gSPVertex(gfx++, vtx, 3, 0);
-    gSPNTrianglesInit_5b(gfx++, 1, 0, 1, 2, 0, 0, 0, 0, 0, 0);
-    return gfx;
+/* World position -> map units (acres from the top-left of row A). */
+static int mm_world_to_map(const xyz_t* pos, f32* u, f32* v) {
+    *u = pos->x / mFI_BK_WORLDSIZE_X_F - 1.0f;
+    *v = pos->z / mFI_BK_WORLDSIZE_Z_F - 1.0f;
+    return *u >= 0.0f && *u <= (f32)FG_BLOCK_X_NUM && *v >= 0.0f && *v <= (f32)FG_BLOCK_Z_NUM;
 }
 
 void pc_minimap_draw(GAME_PLAY* play) {
     static const f32 tile_sizes[3] = { 12.0f, 16.0f, 21.0f };
     static const s16 home_x[PLAYER_NUM] = { 2128, 2352, 2128, 2352 };
     static const s16 home_z[PLAYER_NUM] = { 1488, 1488, 1768, 1768 };
-    static const MMIcon home_icon = { kan_win_ply_tex, TRUE, { 110, 120, 165 }, { 235, 235, 80 } };
+    static const MMIcon dump_icon = { kan_win_gomi_tex, FALSE, { 190, 70, 60 }, { 0, 0, 0 } };
     static const MMIcon my_home_icon = { kan_win_ply_tex, TRUE, { 230, 90, 50 }, { 255, 235, 120 } };
+    /* Villager roof colours by cliff layer (kan_win_npc2T_*_model). */
+    static const u8 roof_prim[3][3] = { { 90, 90, 225 }, { 145, 70, 205 }, { 170, 115, 20 } };
+    static const u8 player_fill[3] = { 255, 70, 30 };
+    static const u8 villager_fill[3] = { 70, 170, 255 };
+    static const u8 special_fill[3] = { 255, 205, 40 };
+    static const u8 white[3] = { 255, 255, 255 };
+    static const u8 dark[3] = { 40, 40, 50 };
     GRAPH* graph;
     PLAYER_ACTOR* player;
+    ACTOR* npc;
     Gfx* poly;
     Gfx* gfx;
-    Vtx* vtx;
     f32 dt;
     f32 aspect;
     f32 xs;
@@ -304,9 +314,9 @@ void pc_minimap_draw(GAME_PLAY* play) {
         s_refresh_timer = MM_REFRESH_FRAMES;
     }
 
-    if (!s_ortho_ready) {
-        mFont_CulcOrthoMatrix(&s_ortho);
-        s_ortho_ready = TRUE;
+    if (!s_dot_ready) {
+        mm_make_dot_tex();
+        s_dot_ready = TRUE;
     }
 
     /* Layout in 320x240 stretch space: one unit of x is xs screen units. */
@@ -319,11 +329,9 @@ void pc_minimap_draw(GAME_PLAY* play) {
     pad = 3.0f;
     y0 = 10.0f;
     x0 = g_pc_settings.minimap_corner ? 10.0f * xs + pad * xs : 320.0f - 10.0f * xs - pad * xs - map_w;
-    icon = tile_h * 0.62f;
+    icon = tile_h * 0.55f;
     alpha = (int)(s_alpha * MM_TEX_FULL_ALPHA);
     player = GET_PLAYER_ACTOR(play);
-
-    vtx = GRAPH_ALLOC_TYPE(graph, Vtx, 6);
 
     OPEN_DISP(graph);
     poly = NOW_POLY_OPA_DISP;
@@ -331,10 +339,6 @@ void pc_minimap_draw(GAME_PLAY* play) {
     gSPDisplayList(NOW_FONT_DISP++, gfx);
 
     gDPNoOpTag(gfx++, PC_NOOP_WIDESCREEN_STRETCH);
-    gSPMatrix(gfx++, &s_ortho, G_MTX_PROJECTION | G_MTX_LOAD | G_MTX_NOPUSH);
-    gSPMatrix(gfx++, &Mtx_clear, G_MTX_MODELVIEW | G_MTX_LOAD | G_MTX_NOPUSH);
-    gSPLoadGeometryMode(gfx++, 0);
-    gSPTexture(gfx++, 0, 0, 0, G_TX_RENDERTILE, G_ON);
 
     /* Frame: soft shadow, then a cream card like the map screen. */
     gfx = mm_fill(gfx, x0 - pad * xs + 1.5f * xs, y0 - pad + 1.5f, x0 + map_w + pad * xs + 1.5f * xs,
@@ -358,23 +362,19 @@ void pc_minimap_draw(GAME_PLAY* play) {
         gDPSetTextureImage_Dolphin(gfx++, G_IM_FMT_CI, G_IM_SIZ_4b, 32, 32, s_map->map_texture[i]);
         gDPSetTile_Dolphin(gfx++, G_DOLPHIN_TLUT_DEFAULT_MODE, G_TX_RENDERTILE, 15, GX_CLAMP, GX_CLAMP, 0, 0);
         gfx = mm_texrect(gfx, x0 + fx * tile_w, y0 + fz * tile_h, x0 + (fx + 1) * tile_w, y0 + (fz + 1) * tile_h,
-                         32, 32);
+                         MM_ACRE_TEXELS, MM_ACRE_TEXELS);
     }
 
-    /* Building icons, at the building when it can be found in the acre. */
+    /* The acre art already shows every building except the dump. */
     gfx = mm_mode(gfx, G_TT_NONE);
     for (i = 0; i < FG_BLOCK_TOTAL_NUM; i++) {
         int fx = i % FG_BLOCK_X_NUM;
         int fz = i / FG_BLOCK_X_NUM;
-        int label = s_map->label_info[fz][fx].label_no;
 
-        if (label < mMP_LABEL_SHOP || label >= mMP_LABEL_NUM) {
-            continue;
+        if (s_map->label_info[fz][fx].label_no == mMP_LABEL_JUNK) {
+            mm_dump_pos(fx, fz, &u, &v);
+            gfx = mm_icon(gfx, &dump_icon, x0 + (fx + u) * tile_w, y0 + (fz + v) * tile_h, icon * xs, icon, alpha);
         }
-
-        mm_building_pos(label, fx, fz, &u, &v);
-        gfx = mm_icon(gfx, &mm_building_icons[label], x0 + (fx + u) * tile_w, y0 + (fz + v) * tile_h, icon * xs,
-                      icon, alpha);
     }
 
     /* Villager houses (the house sits one unit above home_info.ut_z). */
@@ -393,47 +393,45 @@ void pc_minimap_draw(GAME_PLAY* play) {
         if (layer > 2) layer = 2;
         roof.tex = kan_win_yane_tex;
         roof.ia8 = TRUE;
-        roof.prim[0] = mm_roof_prim[layer][0];
-        roof.prim[1] = mm_roof_prim[layer][1];
-        roof.prim[2] = mm_roof_prim[layer][2];
+        roof.prim[0] = roof_prim[layer][0];
+        roof.prim[1] = roof_prim[layer][1];
+        roof.prim[2] = roof_prim[layer][2];
         roof.env[0] = roof.env[1] = roof.env[2] = 225;
 
         u = (f32)(home->block_x - 1) + ((f32)home->ut_x + 0.5f) / (f32)UT_X_NUM;
         v = (f32)(home->block_z - 1) + ((f32)home->ut_z - 0.5f) / (f32)UT_Z_NUM;
-        gfx = mm_icon(gfx, &roof, x0 + u * tile_w, y0 + v * tile_h, icon * 0.85f * xs, icon * 0.85f, alpha);
+        gfx = mm_icon(gfx, &roof, x0 + u * tile_w, y0 + v * tile_h, icon * xs, icon, alpha);
     }
 
-    /* Player houses that have an owner; the current player's own house
-     * stands out. */
-    for (i = 0; i < PLAYER_NUM; i++) {
-        int owner = mHS_get_pl_no(i);
-        int mine;
-
-        if (owner >= PLAYER_NUM || mPr_CheckPrivate(Save_GetPointer(private_data[owner])) != TRUE) {
-            continue;
-        }
-
-        mine = (owner == Common_Get(player_no));
+    /* The player's own house (the four houses are in the acre art). */
+    if (Common_Get(player_no) < PLAYER_NUM) {
+        i = mHS_get_arrange_idx(Common_Get(player_no));
         u = (f32)home_x[i] / mFI_BK_WORLDSIZE_X_F - 1.0f;
         v = ((f32)home_z[i] - mFI_UT_WORLDSIZE_Z_F) / mFI_BK_WORLDSIZE_Z_F - 1.0f;
-        gfx = mm_icon(gfx, mine ? &my_home_icon : &home_icon, x0 + u * tile_w, y0 + v * tile_h, icon * 0.85f * xs,
-                      icon * 0.85f, alpha);
+        gfx = mm_icon(gfx, &my_home_icon, x0 + u * tile_w, y0 + v * tile_h, icon * xs, icon, alpha);
     }
 
-    /* Player arrow: white outline, then the map screen's red marker. */
-    u = player->actor_class.world.position.x / mFI_BK_WORLDSIZE_X_F - 1.0f;
-    v = player->actor_class.world.position.z / mFI_BK_WORLDSIZE_Z_F - 1.0f;
+    /* NPCs around the player (the game only runs the ones near the
+     * player, so those are the ones with a live position). */
+    if (g_pc_settings.minimap_npcs) {
+        for (npc = play->actor_info.list[ACTOR_PART_NPC].actor; npc != NULL; npc = npc->next_actor) {
+            if ((npc->state_bitfield & ACTOR_STATE_INVISIBLE) || !mm_world_to_map(&npc->world.position, &u, &v)) {
+                continue;
+            }
+
+            gfx = mm_dot(gfx, x0 + u * tile_w, y0 + v * tile_h, tile_h * 0.2f, tile_h * 0.09f, xs,
+                         mm_is_villager(npc->npc_id) ? villager_fill : special_fill, dark, alpha);
+        }
+    }
+
+    /* The player: red dot with a white ring. */
+    mm_world_to_map(&player->actor_class.world.position, &u, &v);
     if (u < 0.0f) u = 0.0f;
     if (u > (f32)FG_BLOCK_X_NUM) u = (f32)FG_BLOCK_X_NUM;
     if (v < 0.0f) v = 0.0f;
     if (v > (f32)FG_BLOCK_Z_NUM) v = (f32)FG_BLOCK_Z_NUM;
-
-    gfx = mm_mode(gfx, G_TT_NONE);
-    gDPSetCombineMode(gfx++, G_CC_PRIMITIVE, G_CC_PRIMITIVE);
-    gfx = mm_arrow(gfx, &vtx[0], x0 + u * tile_w, y0 + v * tile_h, player->actor_class.shape_info.rotation.y,
-                   tile_h * 0.5f, xs, 255, 255, 255, (int)(s_alpha * 255.0f));
-    gfx = mm_arrow(gfx, &vtx[3], x0 + u * tile_w, y0 + v * tile_h, player->actor_class.shape_info.rotation.y,
-                   tile_h * 0.34f, xs, 255, 70, 30, (int)(s_alpha * 255.0f));
+    gfx = mm_dot(gfx, x0 + u * tile_w, y0 + v * tile_h, tile_h * 0.26f, tile_h * 0.11f, xs, player_fill, white,
+                 (int)(s_alpha * 255.0f));
 
     gDPPipeSync(gfx++);
     gDPNoOpTag(gfx++, PC_NOOP_WIDESCREEN_STRETCH_OFF);

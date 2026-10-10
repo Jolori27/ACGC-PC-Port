@@ -22,6 +22,7 @@ PCSettings g_pc_settings = {
     .minimap = 0,
     .minimap_size = 1,
     .minimap_corner = 0,
+    .minimap_npcs = 1,
     .nes_aspect = 1,
     .master_volume = 100,
     .stick_deadzone = 12,
@@ -81,6 +82,9 @@ static const char* DEFAULT_SETTINGS =
     "\n"
     "# Minimap corner: 0 = top right, 1 = top left\n"
     "minimap_corner = 0\n"
+    "\n"
+    "# Minimap dots for the villagers (blue) and other NPCs (yellow) around you: 0 = off, 1 = on\n"
+    "minimap_npcs = 1\n"
     "\n"
     "# NES emulator aspect ratio: 0 = stretch to fullscreen, 1 = 4:3 pillarbox\n"
     "nes_aspect = 1\n"
@@ -169,6 +173,8 @@ static void apply_setting(const char* key, const char* value) {
         if (val >= 0 && val <= 2) g_pc_settings.minimap_size = val;
     } else if (strcmp(key, "minimap_corner") == 0) {
         if (val == 0 || val == 1) g_pc_settings.minimap_corner = val;
+    } else if (strcmp(key, "minimap_npcs") == 0) {
+        if (val == 0 || val == 1) g_pc_settings.minimap_npcs = val;
     } else if (strcmp(key, "nes_aspect") == 0) {
         if (val == 0 || val == 1) g_pc_settings.nes_aspect = val;
     } else if (strcmp(key, "master_volume") == 0) {
@@ -271,6 +277,9 @@ void pc_settings_save(void) {
     fprintf(f, "\n");
     fprintf(f, "# Minimap corner: 0 = top right, 1 = top left\n");
     fprintf(f, "minimap_corner = %d\n", g_pc_settings.minimap_corner);
+    fprintf(f, "\n");
+    fprintf(f, "# Minimap dots for the villagers (blue) and other NPCs (yellow) around you: 0 = off, 1 = on\n");
+    fprintf(f, "minimap_npcs = %d\n", g_pc_settings.minimap_npcs);
     fprintf(f, "\n");
     fprintf(f, "# NES emulator aspect ratio: 0 = stretch to fullscreen, 1 = 4:3 pillarbox\n");
     fprintf(f, "nes_aspect = %d\n", g_pc_settings.nes_aspect);
