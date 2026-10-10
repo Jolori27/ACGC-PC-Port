@@ -33,6 +33,7 @@ struct game_s;
 typedef struct {
     int active;  /* the car exists in the town */
     int driving; /* the player is seated in it (mPlayer_INDEX_PC_DRIVE) */
+    int ghost;   /* the player left it without hopping out: no push until clear */
     xyz_t pos;   /* seat anchor on the ground (player root while driving) */
     s16 angle;   /* heading, actor convention: moves along (sin, cos) */
 } PcCar;

@@ -181,14 +181,16 @@ static bIT_ShadowData_c pc_car_shadow_data = {
 };
 
 /* Seat anchor -> car-aligned model space, then undo the 45 degree authoring
- * rotation (model +X+Z diagonal becomes the car's side, -X+Z its hood). */
-static void pc_car_load_matrix(int mirrored) {
+ * rotation (model +X+Z diagonal becomes the car's side, -X+Z its hood).
+ * lift_y raises the body so the wheels touch the ground; the shadow stays
+ * flat on it. */
+static void pc_car_load_matrix(int mirrored, f32 lift_y) {
     s_xyz rot = { 0, 0, 0 };
 
     rot.y = g_pc_car.angle;
     Matrix_softcv3_load(&rot, g_pc_car.pos.x, g_pc_car.pos.y, g_pc_car.pos.z);
     Matrix_scale(PC_CAR_SCALE, PC_CAR_SCALE, PC_CAR_SCALE, MTX_MULT);
-    Matrix_translate(-PC_CAR_SEAT_X, PC_CAR_WHEEL_BOTTOM, -PC_CAR_SEAT_Z, MTX_MULT);
+    Matrix_translate(-PC_CAR_SEAT_X, lift_y, -PC_CAR_SEAT_Z, MTX_MULT);
     if (mirrored) {
         Matrix_scale(-1.0f, 1.0f, 1.0f, MTX_MULT);
     }
@@ -206,8 +208,18 @@ void pc_car_draw(GAME* game) {
     Matrix_push();
     _texture_z_light_fog_prim_npc(graph);
 
+    /* The designer car is a Dolphin-authored model (S_Car_Profile has
+     * ACTOR_STATE_TA_SET); the player draw runs in N64 texture mode, so set
+     * the same state Actor_draw_ta_set would and restore it afterwards. */
+    OPEN_DISP(graph);
+    gDPSetTextureAdjustMode(NEXT_POLY_OPA_DISP, G_TA_DOLPHIN);
+    gDPSetTextureAdjustMode(NEXT_SHADOW_DISP, G_TA_DOLPHIN);
+    gDPSetTexEdgeAlpha(NEXT_POLY_OPA_DISP, 127);
+    gDPSetTexEdgeAlpha(NEXT_SHADOW_DISP, 127);
+    CLOSE_DISP(graph);
+
     for (mirrored = 0; mirrored < 2; mirrored++) {
-        pc_car_load_matrix(mirrored);
+        pc_car_load_matrix(mirrored, PC_CAR_WHEEL_BOTTOM);
 
         OPEN_DISP(graph);
         gDPPipeSync(NEXT_POLY_OPA_DISP);
@@ -219,9 +231,16 @@ void pc_car_draw(GAME* game) {
 
     /* The shadow mesh covers the whole footprint: draw it once. */
     if (Common_Get(clip).bg_item_clip != NULL && Common_Get(clip).bg_item_clip->draw_shadow_proc != NULL) {
-        pc_car_load_matrix(FALSE);
+        pc_car_load_matrix(FALSE, 0.0f);
         (*Common_Get(clip).bg_item_clip->draw_shadow_proc)(game, &pc_car_shadow_data, FALSE);
     }
+
+    OPEN_DISP(graph);
+    gDPSetTextureAdjustMode(NEXT_POLY_OPA_DISP, G_TA_N64);
+    gDPSetTextureAdjustMode(NEXT_SHADOW_DISP, G_TA_N64);
+    gDPSetTexEdgeAlpha(NEXT_POLY_OPA_DISP, 144);
+    gDPSetTexEdgeAlpha(NEXT_SHADOW_DISP, 144);
+    CLOSE_DISP(graph);
 
     Matrix_pull();
 }

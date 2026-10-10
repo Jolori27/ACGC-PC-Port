@@ -9,7 +9,8 @@
 #define aPCD_HOP_HEIGHT 22.0f
 #define aPCD_PLAYER_OFS_Y 200.0f     /* Player_actor_ct's draw offset */
 #define aPCD_PUSH_RADIUS 12.0f       /* how close the player gets to the parked car */
-#define aPCD_ENTER_DIST 30.0f        /* A works within this distance of the car body */
+#define aPCD_ENTER_DIST 18.0f        /* A works within this distance of the car body... */
+#define aPCD_ENTER_ANGLE DEG2SHORT_ANGLE2(60.0f) /* ...when facing it */
 
 /* Player draw offset that puts the root on the car seat (player scale 0.01). */
 static f32 Player_actor_Pc_drive_seat_ofs_y(void) {
@@ -74,8 +75,32 @@ static void Player_actor_settle_main_Pc_drive(ACTOR* actorx, GAME* game) {
     /* A wade across an acre border keeps the player in the car. */
     if (player->requested_main_index != mPlayer_INDEX_WADE) {
         g_pc_car.driving = FALSE;
+        /* Talk, events or a boxed-in exit leave the player standing in the
+         * car: let them walk out rather than shoving them through a wall. */
+        g_pc_car.ghost = TRUE;
         actorx->shape_info.ofs_y = aPCD_PLAYER_OFS_Y;
+        /* Leaving at speed (F5, an event) must not slide the player on foot. */
+        actorx->speed = 0.0f;
+        actorx->position_speed.x = 0.0f;
+        actorx->position_speed.z = 0.0f;
     }
+}
+
+/* Original acre transitions only move between acres through a wade: hops,
+ * spawns and exits have to stay in the acre the player is in. */
+static int Player_actor_Pc_drive_same_acre(const xyz_t* a, const xyz_t* b) {
+    int ax;
+    int az;
+    int bx;
+    int bz;
+
+    if (g_mPlib_wade_disabled) {
+        return TRUE;
+    }
+
+    mFI_Wpos2BlockNum(&ax, &az, *a);
+    mFI_Wpos2BlockNum(&bx, &bz, *b);
+    return ax == bx && az == bz;
 }
 
 /* Arc from start to end; returns TRUE when landed. */
@@ -299,7 +324,8 @@ static void Player_actor_SetEffect_Pc_drive(ACTOR* actorx, GAME* game) {
 static int Player_actor_Pc_drive_exit_ok(ACTOR* actorx, const xyz_t* pos) {
     f32 y;
 
-    if (mCoBG_CheckWaterAttribute(mCoBG_Wpos2Attribute(*pos, NULL))) {
+    if (!Player_actor_Pc_drive_same_acre(&actorx->world.position, pos) ||
+        mCoBG_CheckWaterAttribute(mCoBG_Wpos2Attribute(*pos, NULL))) {
         return FALSE;
     }
 
@@ -396,6 +422,12 @@ static void Player_actor_main_Pc_drive(ACTOR* actorx, GAME* game) {
 
     Player_actor_Item_main(actorx, game);
 
+    /* Borderless acres: a hop can land in the next acre, swap the block like
+     * walking does. (With original transitions hops stay in the acre.) */
+    if (drive_p->phase != mPlayer_PC_DRIVE_PHASE_DRIVE && g_mPlib_wade_disabled) {
+        Player_actor_Set_ScrollDemo_forWade(actorx, game, mEv_IsNotTitleDemo());
+    }
+
     if (drive_p->phase == mPlayer_PC_DRIVE_PHASE_DRIVE) {
         Player_actor_Set_ScrollDemo_forWade(actorx, game, mEv_IsNotTitleDemo());
 
@@ -451,16 +483,21 @@ static void Player_actor_Pc_car_spawn(ACTOR* actorx, GAME* game) {
     g_pc_car.angle = angle + DEG2SHORT_ANGLE2(90.0f);
     y = mCoBG_GetBgY_OnlyCenter_FromWpos2(pos, 0.0f);
 
-    if (ABS(y - actorx->world.position.y) < 15.0f && !mCoBG_CheckWaterAttribute(mCoBG_Wpos2Attribute(pos, NULL)) &&
+    if (ABS(y - actorx->world.position.y) < 15.0f && Player_actor_Pc_drive_same_acre(&actorx->world.position, &pos) &&
+        !mCoBG_CheckWaterAttribute(mCoBG_Wpos2Attribute(pos, NULL)) &&
         !Player_actor_Pc_car_blocked(&actorx->world.position, &pos, g_pc_car.angle)) {
         pos.y = y;
         g_pc_car.pos = pos;
         g_pc_car.active = TRUE;
+        g_pc_car.ghost = FALSE;
     } else {
         /* No room in front (water, cliff, trees): pop it around the player and get in. */
         g_pc_car.pos = actorx->world.position;
         g_pc_car.angle = angle;
         g_pc_car.active = TRUE;
+        /* No push while they are inside, even if the hop-in request loses
+         * to something else this frame. */
+        g_pc_car.ghost = TRUE;
         Player_actor_request_main_pc_drive_all(game, mPlayer_REQUEST_PRIORITY_10);
     }
 
@@ -468,32 +505,44 @@ static void Player_actor_Pc_car_spawn(ACTOR* actorx, GAME* game) {
     Player_actor_Pc_car_puff(game);
 }
 
-static int Player_actor_Pc_car_near(ACTOR* actorx, f32 dist) {
+/* Close to the car body and facing it (so A next to it still fishes,
+ * shakes trees or reads boards when turned away). */
+static int Player_actor_Pc_car_in_reach(ACTOR* actorx) {
     f32 lx;
     f32 lz;
-    f32 ex = 0.0f;
-    f32 ez = 0.0f;
+    f32 nx;
+    f32 nz;
+    xyz_t near_pos;
+    f32 dx;
+    f32 dz;
+    s16 diff;
 
     if (ABS(actorx->world.position.y - g_pc_car.pos.y) > 30.0f) {
         return FALSE;
     }
 
+    /* Nearest point of the body box. */
     pc_car_world_to_local(&actorx->world.position, &lx, &lz);
-    if (lx < pc_car_box_x_min()) {
-        ex = pc_car_box_x_min() - lx;
-    } else if (lx > pc_car_box_x_max()) {
-        ex = lx - pc_car_box_x_max();
-    }
-    if (lz < pc_car_box_z_min()) {
-        ez = pc_car_box_z_min() - lz;
-    } else if (lz > pc_car_box_z_max()) {
-        ez = lz - pc_car_box_z_max();
+    nx = lx < pc_car_box_x_min() ? pc_car_box_x_min() : (lx > pc_car_box_x_max() ? pc_car_box_x_max() : lx);
+    nz = lz < pc_car_box_z_min() ? pc_car_box_z_min() : (lz > pc_car_box_z_max() ? pc_car_box_z_max() : lz);
+    if ((lx - nx) * (lx - nx) + (lz - nz) * (lz - nz) > aPCD_ENTER_DIST * aPCD_ENTER_DIST) {
+        return FALSE;
     }
 
-    return ex * ex + ez * ez < dist * dist;
+    pc_car_local_to_world(nx, nz, &near_pos);
+    dx = near_pos.x - actorx->world.position.x;
+    dz = near_pos.z - actorx->world.position.z;
+    if (dx == 0.0f && dz == 0.0f) {
+        return TRUE;
+    }
+
+    diff = (s16)(atans_table(dz, dx) - actorx->shape_info.rotation.y);
+    return ABS(diff) < aPCD_ENTER_ANGLE;
 }
 
-/* Keep the player out of the parked car's body. */
+/* Keep the player out of the parked car's body. The push is swept with
+ * the player's own BG check, so it never goes through a fence, house or
+ * river bank the car overlaps; the shallowest free side wins. */
 static void Player_actor_Pc_car_push_out(ACTOR* actorx) {
     f32 x0 = pc_car_box_x_min() - aPCD_PUSH_RADIUS;
     f32 x1 = pc_car_box_x_max() + aPCD_PUSH_RADIUS;
@@ -502,8 +551,7 @@ static void Player_actor_Pc_car_push_out(ACTOR* actorx) {
     f32 lx;
     f32 lz;
     f32 pen[4];
-    int best = 0;
-    int i;
+    int tried;
 
     if (ABS(actorx->world.position.y - g_pc_car.pos.y) > 30.0f) {
         return;
@@ -511,6 +559,11 @@ static void Player_actor_Pc_car_push_out(ACTOR* actorx) {
 
     pc_car_world_to_local(&actorx->world.position, &lx, &lz);
     if (lx <= x0 || lx >= x1 || lz <= z0 || lz >= z1) {
+        g_pc_car.ghost = FALSE;
+        return;
+    }
+
+    if (g_pc_car.ghost) {
         return;
     }
 
@@ -518,28 +571,50 @@ static void Player_actor_Pc_car_push_out(ACTOR* actorx) {
     pen[1] = x1 - lx;
     pen[2] = lz - z0;
     pen[3] = z1 - lz;
-    for (i = 1; i < 4; i++) {
-        if (pen[i] < pen[best]) {
-            best = i;
+
+    for (tried = 0; tried < 4; tried++) {
+        int best = -1;
+        int i;
+        f32 tx = lx;
+        f32 tz = lz;
+        xyz_t target = actorx->world.position;
+        xyz_t rev = { 0.0f, 0.0f, 0.0f };
+        mCoBG_Check_c chk;
+
+        for (i = 0; i < 4; i++) {
+            if (pen[i] >= 0.0f && (best < 0 || pen[i] < pen[best])) {
+                best = i;
+            }
+        }
+
+        switch (best) {
+            case 0:
+                tx = x0;
+                break;
+            case 1:
+                tx = x1;
+                break;
+            case 2:
+                tz = z0;
+                break;
+            default:
+                tz = z1;
+                break;
+        }
+        pen[best] = -1.0f;
+
+        pc_car_local_to_world(tx, tz, &target);
+        mCoBG_VirtualBGCheck(&rev, &chk, &actorx->world.position, &target, actorx->shape_info.rotation.y, FALSE, TRUE,
+                             18.0f, 0.0f, TRUE, FALSE, 1);
+        if (rev.x * rev.x + rev.z * rev.z < 1.0f) {
+            actorx->world.position.x = target.x;
+            actorx->world.position.z = target.z;
+            return;
         }
     }
 
-    switch (best) {
-        case 0:
-            lx = x0;
-            break;
-        case 1:
-            lx = x1;
-            break;
-        case 2:
-            lz = z0;
-            break;
-        default:
-            lz = z1;
-            break;
-    }
-
-    pc_car_local_to_world(lx, lz, &actorx->world.position);
+    /* Wedged between the car and a wall: let the player walk out. */
+    g_pc_car.ghost = TRUE;
 }
 
 static void Player_actor_Pc_car_move_before(ACTOR* actorx, GAME* game) {
@@ -566,7 +641,8 @@ static void Player_actor_Pc_car_move_before(ACTOR* actorx, GAME* game) {
     /* The car stays in the town; it just isn't there indoors. */
     if (g_pc_car.active && !g_pc_car.driving && Player_actor_Pc_car_able_place(game) &&
         Player_actor_Pc_car_in_free_state(main_index) && chkTrigger(BUTTON_A) &&
-        Player_actor_Pc_car_near(actorx, aPCD_ENTER_DIST)) {
+        Player_actor_Pc_car_in_reach(actorx) &&
+        Player_actor_Pc_drive_same_acre(&actorx->world.position, &g_pc_car.pos)) {
         Player_actor_request_main_pc_drive_all(game, mPlayer_REQUEST_PRIORITY_10);
     }
 }
@@ -574,8 +650,12 @@ static void Player_actor_Pc_car_move_before(ACTOR* actorx, GAME* game) {
 static void Player_actor_Pc_car_move_after(ACTOR* actorx, GAME* game) {
     PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
 
-    if (g_pc_car.active && !g_pc_car.driving && player->now_main_index != mPlayer_INDEX_PC_DRIVE &&
-        Player_actor_Pc_car_able_place(game)) {
+    if (g_pc_car.active && g_pc_car.driving && player->now_main_index == mPlayer_INDEX_WADE) {
+        /* Acre wade (borderless acres off) moves the seated driver: keep the car under them. */
+        g_pc_car.pos = actorx->world.position;
+    } else if (g_pc_car.active && !g_pc_car.driving && Player_actor_Pc_car_in_free_state(player->now_main_index) &&
+               Player_actor_Pc_car_able_place(game)) {
+        /* Free movement only: scripted walks (events, doors) go where they must. */
         Player_actor_Pc_car_push_out(actorx);
     }
 }
