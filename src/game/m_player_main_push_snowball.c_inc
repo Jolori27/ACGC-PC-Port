@@ -7,6 +7,13 @@ static int Player_actor_request_main_push_snowball_all(GAME* game, void* label, 
         return FALSE;
     }
 
+#ifdef TARGET_PC
+    /* The debug car drives past snowballs instead of pushing them. */
+    if (main_index == mPlayer_INDEX_PC_DRIVE) {
+        return FALSE;
+    }
+#endif
+
     if (main_index == mPlayer_INDEX_WADE_SNOWBALL) {
         mPlayer_main_wade_snowball_c* wade_snowball_p = &player->main_data.wade_snowball;
 

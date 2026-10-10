@@ -29,9 +29,19 @@ static void Player_actor_setup_main_Wade_common(ACTOR* actorx, GAME* game) {
     Player_actor_setup_main_Wade_other_func1(actorx, game);
     dir = request_wade_p->dir;
     pos_p = &actorx->world.position;
-    Player_actor_SetupItem_Base1(actorx, 0, -5.0f, &anim1_idx, &part_table_idx);
-    Player_actor_InitAnimation_Base1(actorx, game, mPlayer_ANIM_WAIT1, anim1_idx, 1.0f, 1.0f, 0.5f, -5.0f,
-                                     part_table_idx);
+#ifdef TARGET_PC
+    if (g_pc_car.driving) {
+        /* Acre transition (borderless acres off) while in the debug car: stay seated. */
+        Player_actor_SetupItem_Base1(actorx, mPlayer_ANIM_RIDEWAIT, -5.0f, &anim1_idx, &part_table_idx);
+        Player_actor_InitAnimation_Base1(actorx, game, mPlayer_ANIM_RIDEWAIT, anim1_idx, 1.0f, 1.0f, 0.5f, -5.0f,
+                                         part_table_idx);
+    } else
+#endif
+    {
+        Player_actor_SetupItem_Base1(actorx, 0, -5.0f, &anim1_idx, &part_table_idx);
+        Player_actor_InitAnimation_Base1(actorx, game, mPlayer_ANIM_WAIT1, anim1_idx, 1.0f, 1.0f, 0.5f, -5.0f,
+                                         part_table_idx);
+    }
     main_wade_p->dir = dir;
     main_wade_p->start_pos = *pos_p;
 
@@ -102,6 +112,14 @@ static void Player_actor_request_proc_index_fromWade(ACTOR* actorx, GAME* game) 
 
     if (Player_actor_able_request_proc_index_fromWade_common(actorx, game)) {
         Player_actor_SettleRequestMainIndexPriority(actorx);
+#ifdef TARGET_PC
+        if (g_pc_car.driving) {
+            /* Back in the debug car on the far side of the acre border. */
+            actorx->world.position = main_wade_p->end_pos;
+            Player_actor_request_main_pc_drive_all(game, mPlayer_REQUEST_PRIORITY_1);
+            return;
+        }
+#endif
         Player_actor_request_main_walk_all(game, &main_wade_p->end_pos, -5.0f,
                                            mPlayer_WALK_FLAG_SET_POS | mPlayer_WALK_FLAG_RESET_MORPH, 1);
     }

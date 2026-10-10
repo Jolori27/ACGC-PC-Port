@@ -2366,6 +2366,10 @@ extern int mPlib_check_request_main_talk_type1_priority(GAME* game) {
                 mPlib_get_player_actor_main_index(game) != mPlayer_INDEX_TIRED &&
                 mPlib_get_player_actor_main_index(game) != mPlayer_INDEX_TALK &&
                 mPlib_get_player_actor_main_index(game) != mPlayer_INDEX_WASH_CAR &&
+#ifdef TARGET_PC
+                /* A near a villager while seated in the debug car */
+                mPlib_get_player_actor_main_index(game) != mPlayer_INDEX_PC_DRIVE &&
+#endif
                 mPlib_get_player_actor_main_index(game) != mPlayer_INDEX_DEMO_STANDING_TRAIN) {
                 res = TRUE;
             }
@@ -2395,6 +2399,13 @@ extern int mPlib_check_request_main_door_type1_priority(GAME* game) {
             res = TRUE;
         }
     }
+
+#ifdef TARGET_PC
+    /* No driving the debug car through a front door. */
+    if (mPlib_get_player_actor_main_index(game) == mPlayer_INDEX_PC_DRIVE) {
+        res = FALSE;
+    }
+#endif
 
     return res;
 }
@@ -3584,7 +3595,13 @@ extern int mPlib_Check_CorrectPlayerPos_forEvent(void) {
                 FALSE,
                 FALSE,
                 FALSE,
+#ifdef TARGET_PC
+                FALSE, /* mPlayer_INDEX_PC_DRIVE */
+#endif
             };
+#ifdef TARGET_PC
+            _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
             // clang-format on
 
             return data[main_index];

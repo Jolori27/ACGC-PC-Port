@@ -303,6 +303,7 @@ set(PC_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/pc_profiler.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/pc_pause_menu.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/pc_minimap.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/pc_car.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/pc_settings_menu.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/pc_menu_util.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/pc_text_draw.c

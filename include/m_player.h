@@ -219,6 +219,9 @@ enum {
     mPlayer_INDEX_DEMO_GET_GOLDEN_ITEM,
     mPlayer_INDEX_DEMO_GET_GOLDEN_ITEM2,
     mPlayer_INDEX_DEMO_GET_GOLDEN_AXE_WAIT,
+#ifdef TARGET_PC
+    mPlayer_INDEX_PC_DRIVE, /* seated in the F5 debug car (pc_car.c) */
+#endif
 
     mPlayer_INDEX_NUM
 };
@@ -1954,6 +1957,22 @@ typedef struct player_main_demo_get_golden_axe_wait_s {
     f32 timer;
 } mPlayer_main_demo_get_golden_axe_wait_c;
 
+#ifdef TARGET_PC
+enum {
+    mPlayer_PC_DRIVE_PHASE_GETON,
+    mPlayer_PC_DRIVE_PHASE_DRIVE,
+    mPlayer_PC_DRIVE_PHASE_GETOFF,
+};
+
+typedef struct {
+    int phase;
+    f32 timer;
+    f32 duration;
+    xyz_t start_pos;
+    xyz_t end_pos;
+} mPlayer_main_pc_drive_c;
+#endif
+
 typedef struct player_main_uki_s {
     xyz_t cast_goal_point;
 } mPlayer_main_uki_c;
@@ -2050,6 +2069,9 @@ typedef union {
     mPlayer_main_demo_getoff_boat_standup_c demo_getoff_boat_standup;
     mPlayer_main_demo_get_golden_item_c demo_get_golden_item;
     mPlayer_main_demo_get_golden_axe_wait_c demo_get_golden_axe_wait;
+#ifdef TARGET_PC
+    mPlayer_main_pc_drive_c pc_drive;
+#endif
     mPlayer_main_uki_c uki;
     mPlayer_main_putaway_uki_c putaway_uki;
     mPlayer_main_balloon_c balloon;

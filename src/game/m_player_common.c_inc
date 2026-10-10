@@ -136,7 +136,13 @@ static void Player_actor_Set_start_refuse(ACTOR* actorx, GAME* game) {
         FALSE,
         FALSE,
         FALSE,
+#ifdef TARGET_PC
+        FALSE, /* mPlayer_INDEX_PC_DRIVE */
+#endif
     };
+#ifdef TARGET_PC
+    _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
     // clang-format on
 
     PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
@@ -276,7 +282,13 @@ static void Player_actor_Set_address_able_display(ACTOR* actorx) {
         mPlayer_ADDRESSABLE_FALSE_TALKING,
         mPlayer_ADDRESSABLE_FALSE_TALKING,
         mPlayer_ADDRESSABLE_FALSE_TALKING,
+#ifdef TARGET_PC
+        mPlayer_ADDRESSABLE_FALSE_MOVEMENT, /* mPlayer_INDEX_PC_DRIVE */
+#endif
     };
+#ifdef TARGET_PC
+    _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
     // clang-format on
 
     PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
@@ -438,7 +450,13 @@ static void Player_actor_SetupShadow(ACTOR* actorx) {
             mPlayer_SHADOW_TYPE_NORMAL,
             mPlayer_SHADOW_TYPE_NORMAL,
             mPlayer_SHADOW_TYPE_NORMAL,
+#ifdef TARGET_PC
+            mPlayer_SHADOW_TYPE_NORMAL, /* mPlayer_INDEX_PC_DRIVE */
+#endif
         };
+#ifdef TARGET_PC
+        _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
         // clang-format on
 
         switch (data[idx]) {
@@ -589,7 +607,13 @@ static void Player_actor_SetupSpeedF(ACTOR* actorx) {
             FALSE,
             FALSE,
             FALSE,
+#ifdef TARGET_PC
+            TRUE, /* mPlayer_INDEX_PC_DRIVE */
+#endif
         };
+#ifdef TARGET_PC
+        _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
         // clang-format on
 
         if (data[idx] == FALSE) {
@@ -723,7 +747,13 @@ static int Player_actor_Get_SetupRequestMainIndexPriority(int main_index) {
             mPlayer_REQUEST_PRIORITY_34,
             mPlayer_REQUEST_PRIORITY_34,
             mPlayer_REQUEST_PRIORITY_33,
+#ifdef TARGET_PC
+            mPlayer_REQUEST_PRIORITY_1, /* mPlayer_INDEX_PC_DRIVE */
+#endif
         };
+#ifdef TARGET_PC
+        _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
         // clang-format on
 
         int priority = data[main_index];
@@ -874,7 +904,13 @@ static void Player_actor_SettleRequestMainIndexPriority(ACTOR* actorx) {
             mPlayer_REQUEST_PRIORITY_0,
             mPlayer_REQUEST_PRIORITY_0,
             mPlayer_REQUEST_PRIORITY_NONE,
+#ifdef TARGET_PC
+            mPlayer_REQUEST_PRIORITY_NONE, /* mPlayer_INDEX_PC_DRIVE */
+#endif
         };
+#ifdef TARGET_PC
+        _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
         // clang-format on
 
         int priority = data[main_index];
@@ -1109,8 +1145,14 @@ static void Player_actor_SetupTextureAnimation(ACTOR* actorx) {
             mPlayer_SETUP_TEXTURE_ANIMATION_NONE,
             mPlayer_SETUP_TEXTURE_ANIMATION_NONE,
             mPlayer_SETUP_TEXTURE_ANIMATION_NONE,
-            mPlayer_SETUP_TEXTURE_ANIMATION_NONE
+            mPlayer_SETUP_TEXTURE_ANIMATION_NONE,
+#ifdef TARGET_PC
+            mPlayer_SETUP_TEXTURE_ANIMATION_EYE | mPlayer_SETUP_TEXTURE_ANIMATION_MOUTH, /* mPlayer_INDEX_PC_DRIVE */
+#endif
         };
+#ifdef TARGET_PC
+        _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
         // clang-format on
 
         int flags = data[main_idx];
@@ -1285,8 +1327,14 @@ static void Player_actor_SetupWeight(ACTOR* actorx) {
                 255,
                 50,
                 50,
-                50
+                50,
+#ifdef TARGET_PC
+                255, /* mPlayer_INDEX_PC_DRIVE */
+#endif
             };
+#ifdef TARGET_PC
+            _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
             // clang-format on
 
             u8 weight = data[main_idx];
@@ -1438,8 +1486,14 @@ static void Player_actor_Setup_status_for_bee(ACTOR* actorx) {
             mPlayer_STATUS_FOR_BEE_WAIT,
             mPlayer_STATUS_FOR_BEE_WAIT,
             mPlayer_STATUS_FOR_BEE_WAIT,
-            mPlayer_STATUS_FOR_BEE_WAIT
+            mPlayer_STATUS_FOR_BEE_WAIT,
+#ifdef TARGET_PC
+            mPlayer_STATUS_FOR_BEE_WAIT, /* mPlayer_INDEX_PC_DRIVE */
+#endif
         };
+#ifdef TARGET_PC
+        _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
         // clang-format on
 
         player->status_for_bee = data[main_idx];
@@ -2895,7 +2949,13 @@ static int Player_actor_CheckPlayer_AbleOutItem(int main_index) {
             mPlayer_ABLE_ITEM_CAN_USE_ALL,
             mPlayer_ABLE_ITEM_CAN_USE_UMBRELLA,
             mPlayer_ABLE_ITEM_CAN_USE_UMBRELLA,
+#ifdef TARGET_PC
+            mPlayer_ABLE_ITEM_NONE, /* mPlayer_INDEX_PC_DRIVE */
+#endif
         };
+#ifdef TARGET_PC
+        _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
         // clang-format on
 
         return data[main_index];
@@ -3029,7 +3089,13 @@ static int Player_actor_CheckPlayer_AbleLoadItem(int main_index) {
             mPlayer_ABLE_ITEM_CAN_USE_ALL,
             mPlayer_ABLE_ITEM_CAN_USE_UMBRELLA,
             mPlayer_ABLE_ITEM_CAN_USE_UMBRELLA,
+#ifdef TARGET_PC
+            mPlayer_ABLE_ITEM_NONE, /* mPlayer_INDEX_PC_DRIVE */
+#endif
         };
+#ifdef TARGET_PC
+        _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
         // clang-format on
 
         return data[main_index];
@@ -3161,7 +3227,13 @@ static int Player_actor_Check_is_demo_mode(int main_index) {
             TRUE,
             TRUE,
             TRUE,
+#ifdef TARGET_PC
+            FALSE, /* mPlayer_INDEX_PC_DRIVE */
+#endif
         };
+#ifdef TARGET_PC
+        _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
         // clang-format on
 
         return data[main_index];
@@ -3895,7 +3967,13 @@ static void Player_actor_SetFootMark_for_settle_main(ACTOR* actorx, GAME* game) 
             FALSE,
             FALSE,
             FALSE,
+#ifdef TARGET_PC
+            FALSE, /* mPlayer_INDEX_PC_DRIVE */
+#endif
         };
+#ifdef TARGET_PC
+        _Static_assert(ARRAY_COUNT(value) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
         // clang-format on
 
         if (value[main_index] != FALSE) {
@@ -4154,7 +4232,13 @@ static int Player_actor_check_cancel_request_change_proc_index(int requested_mai
             FALSE,
             FALSE,
             FALSE,
+#ifdef TARGET_PC
+            FALSE, /* mPlayer_INDEX_PC_DRIVE */
+#endif
         };
+#ifdef TARGET_PC
+        _Static_assert(ARRAY_COUNT(value) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
         // clang-format on
 
         return value[requested_main_index];
@@ -4288,7 +4372,13 @@ static int Player_actor_able_request_main_index_for_reset(int request_main_index
             FALSE,
             FALSE,
             FALSE,
+#ifdef TARGET_PC
+            FALSE, /* mPlayer_INDEX_PC_DRIVE */
+#endif
         };
+#ifdef TARGET_PC
+        _Static_assert(ARRAY_COUNT(value) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
         // clang-format on
 
         return value[request_main_index];
@@ -4522,7 +4612,13 @@ static void Player_actor_cancel_request_change_proc_index_by_A_btn(ACTOR* actorx
                 FALSE,
                 FALSE,
                 FALSE,
+#ifdef TARGET_PC
+                FALSE, /* mPlayer_INDEX_PC_DRIVE */
+#endif
             };
+#ifdef TARGET_PC
+            _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
             // clang-format on
 
             if (data[request_main_index] != FALSE) {
@@ -6691,7 +6787,13 @@ static void Player_actor_check_pitfall(ACTOR* actorx, GAME* game) {
                FALSE,
                FALSE,
                FALSE,
+#ifdef TARGET_PC
+                FALSE, /* mPlayer_INDEX_PC_DRIVE */
+#endif
             };
+#ifdef TARGET_PC
+            _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
             // clang-format on
 
             if (data[main_index] != FALSE) {
@@ -7039,7 +7141,13 @@ static void Player_actor_Set_bgm_volume(ACTOR* actorx, int main_index) {
             mPlayer_BGM_VOLUME_MODE_NORMAL,
             mPlayer_BGM_VOLUME_MODE_NORMAL,
             mPlayer_BGM_VOLUME_MODE_NORMAL,
+#ifdef TARGET_PC
+            mPlayer_BGM_VOLUME_MODE_NORMAL, /* mPlayer_INDEX_PC_DRIVE */
+#endif
         };
+#ifdef TARGET_PC
+        _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
         // clang-format on
 
         PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
@@ -7475,7 +7583,13 @@ static int Player_actor_able_submenu_request_main_index(GAME* game) {
                 FALSE,
                 FALSE,
                 FALSE,
+#ifdef TARGET_PC
+                FALSE, /* mPlayer_INDEX_PC_DRIVE */
+#endif
             };
+#ifdef TARGET_PC
+            _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
             // clang-format on
 
             request_main_index = data[request_main_index];
@@ -7806,7 +7920,13 @@ static int Player_actor_check_cancel_event_without_priority(GAME* game) {
             FALSE,
             FALSE,
             FALSE,
+#ifdef TARGET_PC
+            FALSE, /* mPlayer_INDEX_PC_DRIVE */
+#endif
         };
+#ifdef TARGET_PC
+        _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
         // clang-format on
 
         return data[main_index];
@@ -8606,7 +8726,13 @@ static int Player_actor_check_able_change_camera_normal_index(ACTOR* actorx) {
                 FALSE,
                 FALSE,
                 FALSE,
+#ifdef TARGET_PC
+                TRUE, /* mPlayer_INDEX_PC_DRIVE */
+#endif
             };
+#ifdef TARGET_PC
+            _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
             // clang-format on
 
             return data[main_index];

@@ -30,6 +30,7 @@
 
 #ifdef TARGET_PC
 #include "pc_settings.h"
+#include "pc_car.h"
 #endif
 
 static int l_skip_other_func_set_wade = FALSE;
@@ -118,6 +119,9 @@ static void Player_actor_Birth_TradingItem(ACTOR* actor, mActor_name_t item, int
 static void Player_actor_CHange_TradingItemMode(ACTOR* actorx, u8 mode);
 static int Player_actor_Check_ItemParent(ACTOR* actor);
 static ACTOR* Player_actor_Get_umbrella_p(ACTOR* actor, GAME* game);
+#ifdef TARGET_PC
+static int Player_actor_request_main_pc_drive_all(GAME* game, int prio);
+#endif
 static s8 Player_actor_Get_ItemKind(ACTOR* actor, int kind);
 static void Player_actor_Set_now_item_main_index(ACTOR* actorx, int item_main_index);
 static void Player_actor_SetEffect_forTakeout_item(ACTOR* actorx, GAME* game);
@@ -507,6 +511,9 @@ static int Player_actor_request_main_demo_getoff_boat_all(GAME* game, const xyz_
 #include "../src/game/m_player_main_demo_get_golden_item.c_inc"
 #include "../src/game/m_player_main_demo_get_golden_item2.c_inc"
 #include "../src/game/m_player_main_demo_get_golden_axe_wait.c_inc"
+#ifdef TARGET_PC
+#include "../src/game/m_player_main_pc_drive.c_inc"
+#endif
 
 // static void Player_actor_Refuse_pickup_demo_ct(ACTOR*);
 
@@ -819,7 +826,13 @@ static void Player_actor_request_main_change_from_submenu(ACTOR* actorx, GAME* g
         &Player_actor_request_main_demo_get_golden_item_from_submenu,
         NULL,
         NULL,
+#ifdef TARGET_PC
+        NULL, /* mPlayer_INDEX_PC_DRIVE */
+#endif
     };
+#ifdef TARGET_PC
+    _Static_assert(ARRAY_COUNT(proc) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
 
     if (mPlib_Check_SetOrderSubmenu()) {
         mPlayer_change_data_from_submenu_c* data = mPlib_Get_change_data_from_submenu_p();
@@ -1040,7 +1053,13 @@ static void Player_actor_settle_main(ACTOR* actorx, GAME* game) {
         &Player_actor_settle_main_Demo_get_golden_item,
         &Player_actor_settle_main_Demo_get_golden_item2,
         NULL,
+#ifdef TARGET_PC
+        &Player_actor_settle_main_Pc_drive, /* mPlayer_INDEX_PC_DRIVE */
+#endif
     };
+#ifdef TARGET_PC
+    _Static_assert(ARRAY_COUNT(proc) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
 
     PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
     int idx = player->now_main_index;
@@ -1301,7 +1320,13 @@ static int Player_actor_change_main_index(ACTOR* actorx, GAME* game) {
         &Player_actor_setup_main_Demo_get_golden_item,
         &Player_actor_setup_main_Demo_get_golden_item2,
         &Player_actor_setup_main_Demo_get_golden_axe_wait,
+#ifdef TARGET_PC
+        &Player_actor_setup_main_Pc_drive, /* mPlayer_INDEX_PC_DRIVE */
+#endif
     };
+#ifdef TARGET_PC
+    _Static_assert(ARRAY_COUNT(proc) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
     PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
 
     if (player->requested_main_index_changed) {
@@ -1720,17 +1745,29 @@ extern void Player_actor_move(ACTOR* actorx, GAME* game) {
         &Player_actor_main_Demo_get_golden_item,
         &Player_actor_main_Demo_get_golden_item2,
         &Player_actor_main_Demo_get_golden_axe_wait,
+#ifdef TARGET_PC
+        &Player_actor_main_Pc_drive, /* mPlayer_INDEX_PC_DRIVE */
+#endif
     };
+#ifdef TARGET_PC
+    _Static_assert(ARRAY_COUNT(proc) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
     PLAYER_ACTOR* player = (PLAYER_ACTOR*)actorx;
     int idx;
 
     Player_actor_move_other_func1(actorx, game); //
+#ifdef TARGET_PC
+    Player_actor_Pc_car_move_before(actorx, game);
+#endif
     idx = player->now_main_index;
     if (mPlayer_MAIN_INDEX_VALID(idx) == FALSE || proc[idx] == NULL) {
         return;
     }
 
     (*proc[idx])(actorx, game);
+#ifdef TARGET_PC
+    Player_actor_Pc_car_move_after(actorx, game);
+#endif
     Player_actor_move_other_func2(actorx, game); //
 
 #ifdef PC_ENHANCEMENTS
@@ -1775,7 +1812,13 @@ extern void Player_actor_draw(ACTOR* actorx, GAME* game) {
         mPlayer_DRAW_TYPE_NORMAL, mPlayer_DRAW_TYPE_NORMAL, mPlayer_DRAW_TYPE_NORMAL, mPlayer_DRAW_TYPE_NORMAL,
         mPlayer_DRAW_TYPE_NORMAL, mPlayer_DRAW_TYPE_NORMAL, mPlayer_DRAW_TYPE_NORMAL, mPlayer_DRAW_TYPE_NORMAL,
         mPlayer_DRAW_TYPE_NORMAL,
+#ifdef TARGET_PC
+        mPlayer_DRAW_TYPE_NORMAL, /* mPlayer_INDEX_PC_DRIVE */
+#endif
     };
+#ifdef TARGET_PC
+    _Static_assert(ARRAY_COUNT(data) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
 
     static const mPlayer_DRAW_PROC proc[] = {
         (mPlayer_DRAW_PROC)&none_proc2,
@@ -1793,4 +1836,8 @@ extern void Player_actor_draw(ACTOR* actorx, GAME* game) {
             Player_actor_draw_other_func2(actorx, game); //
         }
     }
+
+#ifdef TARGET_PC
+    Player_actor_Pc_car_draw(game);
+#endif
 }

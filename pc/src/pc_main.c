@@ -10,6 +10,7 @@
 #include "pc_pause_menu.h"
 #include "pc_settings_menu.h"
 #include "pc_minimap.h"
+#include "pc_car.h"
 #include "pc_profiler.h"
 #include "m_kankyo.h"
 
@@ -185,6 +186,12 @@ int pc_platform_poll_events(void) {
                 }
                 if (event.key.keysym.sym == SDLK_F3 && !event.key.repeat) {
                     pc_speedhack_toggle();
+                    break;
+                }
+                /* Debug car: pop it in front of the player / remove it. */
+                if (event.key.keysym.sym == SDLK_F5 && !event.key.repeat && !g_pc_paused &&
+                    pc_car_toggle_allowed()) {
+                    pc_car_request_toggle();
                     break;
                 }
                 if (event.key.keysym.sym == SDLK_ESCAPE && !event.key.repeat) {

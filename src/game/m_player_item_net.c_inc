@@ -186,7 +186,13 @@ static void Player_actor_Item_net_CulcJointAngle_dummy_net(ACTOR* actor) {
         Player_actor_Item_net_CulcJointAngle_dummy_net_reset, Player_actor_Item_net_CulcJointAngle_dummy_net_reset,
         Player_actor_Item_net_CulcJointAngle_dummy_net_reset,
 
+#ifdef TARGET_PC
+        Player_actor_Item_net_CulcJointAngle_dummy_net_reset, /* mPlayer_INDEX_PC_DRIVE */
+#endif
     };
+#ifdef TARGET_PC
+    _Static_assert(ARRAY_COUNT(proc) == mPlayer_INDEX_NUM, "player main index table size");
+#endif
     PLAYER_ACTOR* player = (PLAYER_ACTOR*)actor;
     int index = player->now_main_index;
 
