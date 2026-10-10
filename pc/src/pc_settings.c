@@ -19,6 +19,9 @@ PCSettings g_pc_settings = {
     .disable_shop_visitor_req = 0,
     .borderless_acres = 1,
     .dash_speed = 100,
+    .minimap = 0,
+    .minimap_size = 1,
+    .minimap_corner = 0,
     .nes_aspect = 1,
     .master_volume = 100,
     .stick_deadzone = 12,
@@ -69,6 +72,15 @@ static const char* DEFAULT_SETTINGS =
     "\n"
     "# Sprint speed (holding B) as a percentage of the original: 100-200\n"
     "dash_speed = 100\n"
+    "\n"
+    "# Town minimap (toggle in game with the Minimap key, Tab / LB by default): 0 = hidden, 1 = shown\n"
+    "minimap = 0\n"
+    "\n"
+    "# Minimap size: 0 = small, 1 = medium, 2 = large\n"
+    "minimap_size = 1\n"
+    "\n"
+    "# Minimap corner: 0 = top right, 1 = top left\n"
+    "minimap_corner = 0\n"
     "\n"
     "# NES emulator aspect ratio: 0 = stretch to fullscreen, 1 = 4:3 pillarbox\n"
     "nes_aspect = 1\n"
@@ -151,6 +163,12 @@ static void apply_setting(const char* key, const char* value) {
         if (val == 0 || val == 1) g_pc_settings.borderless_acres = val;
     } else if (strcmp(key, "dash_speed") == 0) {
         if (val >= 100 && val <= 200) g_pc_settings.dash_speed = val;
+    } else if (strcmp(key, "minimap") == 0) {
+        if (val == 0 || val == 1) g_pc_settings.minimap = val;
+    } else if (strcmp(key, "minimap_size") == 0) {
+        if (val >= 0 && val <= 2) g_pc_settings.minimap_size = val;
+    } else if (strcmp(key, "minimap_corner") == 0) {
+        if (val == 0 || val == 1) g_pc_settings.minimap_corner = val;
     } else if (strcmp(key, "nes_aspect") == 0) {
         if (val == 0 || val == 1) g_pc_settings.nes_aspect = val;
     } else if (strcmp(key, "master_volume") == 0) {
@@ -244,6 +262,15 @@ void pc_settings_save(void) {
     fprintf(f, "\n");
     fprintf(f, "# Sprint speed (holding B) as a percentage of the original: 100-200\n");
     fprintf(f, "dash_speed = %d\n", g_pc_settings.dash_speed);
+    fprintf(f, "\n");
+    fprintf(f, "# Town minimap (toggle in game with the Minimap key, Tab / LB by default): 0 = hidden, 1 = shown\n");
+    fprintf(f, "minimap = %d\n", g_pc_settings.minimap);
+    fprintf(f, "\n");
+    fprintf(f, "# Minimap size: 0 = small, 1 = medium, 2 = large\n");
+    fprintf(f, "minimap_size = %d\n", g_pc_settings.minimap_size);
+    fprintf(f, "\n");
+    fprintf(f, "# Minimap corner: 0 = top right, 1 = top left\n");
+    fprintf(f, "minimap_corner = %d\n", g_pc_settings.minimap_corner);
     fprintf(f, "\n");
     fprintf(f, "# NES emulator aspect ratio: 0 = stretch to fullscreen, 1 = 4:3 pillarbox\n");
     fprintf(f, "nes_aspect = %d\n", g_pc_settings.nes_aspect);

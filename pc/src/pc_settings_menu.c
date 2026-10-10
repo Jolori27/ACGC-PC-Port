@@ -27,6 +27,9 @@ enum {
     ITEM_BORDERLESS_ACRES,
     ITEM_DASH_SPEED,
     ITEM_NES_ASPECT,
+    ITEM_MINIMAP,
+    ITEM_MINIMAP_SIZE,
+    ITEM_MINIMAP_CORNER,
     ITEM_QUICK_START,
     ITEM_MASTER_VOLUME,
     ITEM_STICK_DEADZONE,
@@ -61,6 +64,12 @@ static const Item tab_gameplay_items[] = {
     { "Quick start",      ITEM_QUICK_START,      0 },
 };
 
+static const Item tab_map_items[] = {
+    { "Minimap",        ITEM_MINIMAP,        0 },
+    { "Size",           ITEM_MINIMAP_SIZE,   0 },
+    { "Corner",         ITEM_MINIMAP_CORNER, 0 },
+};
+
 static const Item tab_audio_items[] = {
     { "Master volume", ITEM_MASTER_VOLUME, 0 },
 };
@@ -83,6 +92,7 @@ static const Tab s_tabs[] = {
     { "Audio",    TAB_ITEMS(tab_audio_items) },
     { "Controls", TAB_ITEMS(tab_controls_items) },
     { "Gameplay", TAB_ITEMS(tab_gameplay_items) },
+    { "Map",      TAB_ITEMS(tab_map_items) },
 };
 #define TAB_COUNT ((int)(sizeof(s_tabs) / sizeof(s_tabs[0])))
 
@@ -145,6 +155,7 @@ static const BindRow s_bind_rows[] = {
     BROW("D-Pad Down",  dpad_down,  dpad_down),
     BROW("D-Pad Left",  dpad_left,  dpad_left),
     BROW("D-Pad Right", dpad_right, dpad_right),
+    BROW("Minimap",     minimap,    minimap),
 };
 #define BIND_ROW_COUNT    ((int)(sizeof(s_bind_rows) / sizeof(s_bind_rows[0])))
 #define BIND_VISIBLE      9
@@ -260,6 +271,9 @@ static void recompute_dirty(void) {
         (s_pending.borderless_acres != g_pc_settings.borderless_acres) ||
         (s_pending.dash_speed       != g_pc_settings.dash_speed) ||
         (s_pending.nes_aspect       != g_pc_settings.nes_aspect) ||
+        (s_pending.minimap          != g_pc_settings.minimap) ||
+        (s_pending.minimap_size     != g_pc_settings.minimap_size) ||
+        (s_pending.minimap_corner   != g_pc_settings.minimap_corner) ||
         (s_pending.quick_start      != g_pc_settings.quick_start) ||
         (s_pending.master_volume    != g_pc_settings.master_volume) ||
         (s_pending.stick_deadzone   != g_pc_settings.stick_deadzone) ||
@@ -327,6 +341,15 @@ static void item_cycle(int id, int dir) {
         } break;
         case ITEM_NES_ASPECT:
             s_pending.nes_aspect = !s_pending.nes_aspect;
+            break;
+        case ITEM_MINIMAP:
+            s_pending.minimap = !s_pending.minimap;
+            break;
+        case ITEM_MINIMAP_SIZE:
+            s_pending.minimap_size = (s_pending.minimap_size + (dir > 0 ? 1 : 2)) % 3;
+            break;
+        case ITEM_MINIMAP_CORNER:
+            s_pending.minimap_corner = !s_pending.minimap_corner;
             break;
         case ITEM_QUICK_START:
             s_pending.quick_start = !s_pending.quick_start;
@@ -404,6 +427,18 @@ static void item_format(int id, char* buf, size_t n) {
         case ITEM_NES_ASPECT:
             snprintf(buf, n, "%s", s_pending.nes_aspect ? "< 4:3 >" : "< Stretch >");
             break;
+        case ITEM_MINIMAP:
+            snprintf(buf, n, "%s", s_pending.minimap ? "< On >" : "< Off >");
+            break;
+        case ITEM_MINIMAP_SIZE:
+            snprintf(buf, n, "%s",
+                s_pending.minimap_size == 0 ? "< Small >" :
+                s_pending.minimap_size == 1 ? "< Medium >" :
+                                              "< Large >");
+            break;
+        case ITEM_MINIMAP_CORNER:
+            snprintf(buf, n, "%s", s_pending.minimap_corner ? "< Top left >" : "< Top right >");
+            break;
         case ITEM_QUICK_START:
             snprintf(buf, n, "%s", s_pending.quick_start ? "< On >" : "< Off >");
             break;
@@ -441,6 +476,9 @@ static int item_changed(int id) {
         case ITEM_BORDERLESS_ACRES: return s_pending.borderless_acres != g_pc_settings.borderless_acres;
         case ITEM_DASH_SPEED:    return s_pending.dash_speed    != g_pc_settings.dash_speed;
         case ITEM_NES_ASPECT:    return s_pending.nes_aspect    != g_pc_settings.nes_aspect;
+        case ITEM_MINIMAP:       return s_pending.minimap       != g_pc_settings.minimap;
+        case ITEM_MINIMAP_SIZE:  return s_pending.minimap_size  != g_pc_settings.minimap_size;
+        case ITEM_MINIMAP_CORNER: return s_pending.minimap_corner != g_pc_settings.minimap_corner;
         case ITEM_QUICK_START:   return s_pending.quick_start   != g_pc_settings.quick_start;
         case ITEM_MASTER_VOLUME: return s_pending.master_volume != g_pc_settings.master_volume;
         case ITEM_STICK_DEADZONE:  return s_pending.stick_deadzone  != g_pc_settings.stick_deadzone;

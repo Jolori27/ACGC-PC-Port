@@ -1373,3 +1373,24 @@ extern void mMP_map_ovl_destruct(Submenu* submenu) {
 
     submenu->overlay->map_ovl = NULL;
 }
+
+#ifdef TARGET_PC
+/* PC minimap (pc/src/pc_minimap.c): build the same acre art, palettes and
+ * building/house labels the map screen uses, without the submenu. */
+static mMP_Ovl_c l_mMP_pc_minimap;
+
+extern const mMP_Ovl_c* mMP_pc_minimap_build(void) {
+    mMP_Ovl_c* map_ovl = &l_mMP_pc_minimap;
+
+    mem_clear((u8*)map_ovl, sizeof(mMP_Ovl_c), 0);
+    map_ovl->combination_table = data_combi_table;
+    mMP_set_map_texture_pal(map_ovl);
+    mMP_set_house_data(map_ovl, NULL);
+    mMP_set_field_data(map_ovl);
+    return map_ovl;
+}
+
+extern u16* mMP_pc_minimap_palette(int pal_no) {
+    return l_kan_tizu_pal[pal_no & 1];
+}
+#endif

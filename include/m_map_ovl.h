@@ -121,6 +121,11 @@ extern void mMP_map_ovl_set_proc(Submenu* submenu);
 extern void mMP_map_ovl_construct(Submenu* submenu);
 extern void mMP_map_ovl_destruct(Submenu* submenu);
 
+#ifdef TARGET_PC
+extern const mMP_Ovl_c* mMP_pc_minimap_build(void);
+extern u16* mMP_pc_minimap_palette(int pal_no);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

@@ -38,6 +38,9 @@
 #include "m_scene_table.h"
 #include "m_player_lib.h"
 #include "m_skin_matrix.h"
+#ifdef TARGET_PC
+#include "pc_minimap.h"
+#endif
 #include "padmgr.h"
 #ifdef TARGET_PC
 #include "pc_diag.h"
@@ -838,6 +841,9 @@ static void Game_play_draw(GAME_PLAY* play) {
             PC_DIAG(3, "Game_play_draw: bump done, drawing\n");
             watch_my_step_draw(play);
             banti_draw(play);
+#ifdef TARGET_PC
+            pc_minimap_draw(play);
+#endif
             mSM_submenu_draw(&play->submenu, (GAME*)play);
         }
     }
