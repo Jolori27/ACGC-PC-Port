@@ -16,11 +16,12 @@ struct game_s;
 
 /* Car-aligned model space: the model is authored rotated 45 degrees; after
  * undoing that, +Z is the hood and +X the side that has wheels modelled.
- * The seat (driver side, +X is the car's left) is where the player's root
- * sits while driving. */
-#define PC_CAR_SEAT_X 1300.0f
-#define PC_CAR_SEAT_Y 2500.0f
-#define PC_CAR_SEAT_Z (-2300.0f)
+ * The seat is where the player's root sits while driving: centred on the
+ * two bucket seats' cushion (Y 1500..1875 over Z -1312..+1125), in front of
+ * the reclined backrest that rises behind it to Z -4875. */
+#define PC_CAR_SEAT_X 0.0f
+#define PC_CAR_SEAT_Y 2000.0f
+#define PC_CAR_SEAT_Z (-450.0f)
 
 /* Car body box in car-aligned model units (from the vertex data). */
 #define PC_CAR_BOX_X_MIN (-3750.0f)
