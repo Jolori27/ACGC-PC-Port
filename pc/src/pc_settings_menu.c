@@ -27,6 +27,7 @@ enum {
     ITEM_BORDERLESS_ACRES,
     ITEM_DASH_SPEED,
     ITEM_NES_ASPECT,
+    ITEM_QUICK_START,
     ITEM_MASTER_VOLUME,
     ITEM_STICK_DEADZONE,
     ITEM_CSTICK_DEADZONE,
@@ -57,6 +58,7 @@ static const Item tab_gameplay_items[] = {
     { "Borderless acres", ITEM_BORDERLESS_ACRES, 0 },
     { "Sprint speed",     ITEM_DASH_SPEED,       0 },
     { "NES aspect",       ITEM_NES_ASPECT,       0 },
+    { "Quick start",      ITEM_QUICK_START,      0 },
 };
 
 static const Item tab_audio_items[] = {
@@ -258,6 +260,7 @@ static void recompute_dirty(void) {
         (s_pending.borderless_acres != g_pc_settings.borderless_acres) ||
         (s_pending.dash_speed       != g_pc_settings.dash_speed) ||
         (s_pending.nes_aspect       != g_pc_settings.nes_aspect) ||
+        (s_pending.quick_start      != g_pc_settings.quick_start) ||
         (s_pending.master_volume    != g_pc_settings.master_volume) ||
         (s_pending.stick_deadzone   != g_pc_settings.stick_deadzone) ||
         (s_pending.cstick_deadzone  != g_pc_settings.cstick_deadzone);
@@ -324,6 +327,9 @@ static void item_cycle(int id, int dir) {
         } break;
         case ITEM_NES_ASPECT:
             s_pending.nes_aspect = !s_pending.nes_aspect;
+            break;
+        case ITEM_QUICK_START:
+            s_pending.quick_start = !s_pending.quick_start;
             break;
         case ITEM_MASTER_VOLUME: {
             int v = s_pending.master_volume + (dir > 0 ? 10 : -10);
@@ -398,6 +404,9 @@ static void item_format(int id, char* buf, size_t n) {
         case ITEM_NES_ASPECT:
             snprintf(buf, n, "%s", s_pending.nes_aspect ? "< 4:3 >" : "< Stretch >");
             break;
+        case ITEM_QUICK_START:
+            snprintf(buf, n, "%s", s_pending.quick_start ? "< On >" : "< Off >");
+            break;
         case ITEM_MASTER_VOLUME:
             snprintf(buf, n, "< %d%% >", s_pending.master_volume);
             break;
@@ -432,6 +441,7 @@ static int item_changed(int id) {
         case ITEM_BORDERLESS_ACRES: return s_pending.borderless_acres != g_pc_settings.borderless_acres;
         case ITEM_DASH_SPEED:    return s_pending.dash_speed    != g_pc_settings.dash_speed;
         case ITEM_NES_ASPECT:    return s_pending.nes_aspect    != g_pc_settings.nes_aspect;
+        case ITEM_QUICK_START:   return s_pending.quick_start   != g_pc_settings.quick_start;
         case ITEM_MASTER_VOLUME: return s_pending.master_volume != g_pc_settings.master_volume;
         case ITEM_STICK_DEADZONE:  return s_pending.stick_deadzone  != g_pc_settings.stick_deadzone;
         case ITEM_CSTICK_DEADZONE: return s_pending.cstick_deadzone != g_pc_settings.cstick_deadzone;

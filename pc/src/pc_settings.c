@@ -3,6 +3,8 @@
 #include "pc_platform.h"
 #include "m_player_lib.h"
 #include "ac_birth_control.h"
+#include "m_font.h"
+#include "pc_typing.h"
 
 PCSettings g_pc_settings = {
     .window_width  = PC_SCREEN_WIDTH,
@@ -21,6 +23,11 @@ PCSettings g_pc_settings = {
     .master_volume = 100,
     .stick_deadzone = 12,
     .cstick_deadzone = 12,
+    .quick_start = 0,
+    .quick_start_gender = 0,
+    .quick_start_house = 0,
+    .quick_start_player_name = "Player",
+    .quick_start_town_name = "Town",
 };
 
 static const char* SETTINGS_FILE = "settings.ini";
@@ -66,6 +73,21 @@ static const char* DEFAULT_SETTINGS =
     "# NES emulator aspect ratio: 0 = stretch to fullscreen, 1 = 4:3 pillarbox\n"
     "nes_aspect = 1\n"
     "\n"
+    "[QuickStart]\n"
+    "# Skip the intro when starting a new town: 0 = normal intro, 1 = skip\n"
+    "# (train ride with Rover, Tom Nook's house sale and the part-time job)\n"
+    "quick_start = 0\n"
+    "\n"
+    "# Names used by the quick start (max 8 characters each)\n"
+    "quick_start_player_name = Player\n"
+    "quick_start_town_name = Town\n"
+    "\n"
+    "# 0 = boy, 1 = girl\n"
+    "quick_start_gender = 0\n"
+    "\n"
+    "# House: 0 = top-left, 1 = top-right, 2 = bottom-left, 3 = bottom-right\n"
+    "quick_start_house = 0\n"
+    "\n"
     "[Audio]\n"
     "# Master output volume as a percentage (0-100)\n"
     "master_volume = 100\n"
@@ -88,10 +110,21 @@ static void trim_end(char* s) {
     }
 }
 
+static void copy_string_setting(char* dst, size_t size, const char* value) {
+    strncpy(dst, value, size - 1);
+    dst[size - 1] = '\0';
+}
+
 static void apply_setting(const char* key, const char* value) {
     int val = atoi(value);
 
-    if (strcmp(key, "window_width") == 0) {
+    if (strcmp(key, "quick_start_player_name") == 0) {
+        copy_string_setting(g_pc_settings.quick_start_player_name,
+                            sizeof(g_pc_settings.quick_start_player_name), value);
+    } else if (strcmp(key, "quick_start_town_name") == 0) {
+        copy_string_setting(g_pc_settings.quick_start_town_name,
+                            sizeof(g_pc_settings.quick_start_town_name), value);
+    } else if (strcmp(key, "window_width") == 0) {
         if (val >= 640) g_pc_settings.window_width = val;
     } else if (strcmp(key, "window_height") == 0) {
         if (val >= 480) g_pc_settings.window_height = val;
@@ -126,6 +159,12 @@ static void apply_setting(const char* key, const char* value) {
         if (val >= 0 && val <= 40) g_pc_settings.stick_deadzone = val;
     } else if (strcmp(key, "cstick_deadzone") == 0) {
         if (val >= 0 && val <= 40) g_pc_settings.cstick_deadzone = val;
+    } else if (strcmp(key, "quick_start") == 0) {
+        if (val == 0 || val == 1) g_pc_settings.quick_start = val;
+    } else if (strcmp(key, "quick_start_gender") == 0) {
+        if (val == 0 || val == 1) g_pc_settings.quick_start_gender = val;
+    } else if (strcmp(key, "quick_start_house") == 0) {
+        if (val >= 0 && val <= 3) g_pc_settings.quick_start_house = val;
     }
 }
 
@@ -209,6 +248,21 @@ void pc_settings_save(void) {
     fprintf(f, "# NES emulator aspect ratio: 0 = stretch to fullscreen, 1 = 4:3 pillarbox\n");
     fprintf(f, "nes_aspect = %d\n", g_pc_settings.nes_aspect);
     fprintf(f, "\n");
+    fprintf(f, "[QuickStart]\n");
+    fprintf(f, "# Skip the intro when starting a new town: 0 = normal intro, 1 = skip\n");
+    fprintf(f, "# (train ride with Rover, Tom Nook's house sale and the part-time job)\n");
+    fprintf(f, "quick_start = %d\n", g_pc_settings.quick_start);
+    fprintf(f, "\n");
+    fprintf(f, "# Names used by the quick start (max 8 characters each)\n");
+    fprintf(f, "quick_start_player_name = %s\n", g_pc_settings.quick_start_player_name);
+    fprintf(f, "quick_start_town_name = %s\n", g_pc_settings.quick_start_town_name);
+    fprintf(f, "\n");
+    fprintf(f, "# 0 = boy, 1 = girl\n");
+    fprintf(f, "quick_start_gender = %d\n", g_pc_settings.quick_start_gender);
+    fprintf(f, "\n");
+    fprintf(f, "# House: 0 = top-left, 1 = top-right, 2 = bottom-left, 3 = bottom-right\n");
+    fprintf(f, "quick_start_house = %d\n", g_pc_settings.quick_start_house);
+    fprintf(f, "\n");
     fprintf(f, "[Audio]\n");
     fprintf(f, "# Master output volume as a percentage (0-100)\n");
     fprintf(f, "master_volume = %d\n", g_pc_settings.master_volume);
@@ -219,6 +273,46 @@ void pc_settings_save(void) {
     fprintf(f, "cstick_deadzone = %d\n", g_pc_settings.cstick_deadzone);
     fclose(f);
     printf("[Settings] Saved %s\n", SETTINGS_FILE);
+}
+
+/* Convert a UTF-8 name from settings.ini to the game's character set,
+ * space-padded to max_len like the in-game name editor leaves it.
+ * Characters the game font can't show are dropped. Returns the number
+ * of non-space characters written (0 = unusable name). */
+int pc_settings_encode_game_name(const char* utf8, unsigned char* dst, int max_len) {
+    const unsigned char* p = (const unsigned char*)utf8;
+    int len = 0;
+    int visible = 0;
+
+    while (*p != '\0' && len < max_len) {
+        int bytes = (*p < 0x80) ? 1 : ((*p & 0xE0) == 0xC0) ? 2 : ((*p & 0xF0) == 0xE0) ? 3 : 4;
+        int code;
+
+#ifdef KEYBOARD_TYPING
+        if (*p >= 0x80 && (p[1] & 0xC0) != 0x80) {
+            /* Not UTF-8: the file was saved as ANSI/Latin-1 (e.g. old Notepad). */
+            char latin1[3] = { (char)(0xC0 | (*p >> 6)), (char)(0x80 | (*p & 0x3F)), '\0' };
+            code = pc_utf8_to_game_code(latin1);
+            bytes = 1;
+        } else {
+            code = pc_utf8_to_game_code((const char*)p);
+        }
+#else
+        code = (*p >= 0x20 && *p < 0x7F) ? *p : -1;
+#endif
+        if (code >= 0) {
+            dst[len++] = (unsigned char)code;
+            if (code != CHAR_SPACE) visible++;
+        }
+
+        while (bytes-- > 0 && *p != '\0') p++;
+    }
+
+    while (len < max_len) {
+        dst[len++] = CHAR_SPACE;
+    }
+
+    return visible;
 }
 
 /* Accessor for TUs that can't include pc_settings.h (pc_nes_fixnes.c). */

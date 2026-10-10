@@ -25,6 +25,16 @@
 #include "m_common_data.h"
 #include "m_design_ovl.h"
 
+#ifdef TARGET_PC
+#include "m_calendar.h"
+#include "m_kabu_manager.h"
+#include "m_kankyo.h"
+#include "m_player.h"
+#include "m_post_office.h"
+#include "m_shop.h"
+#include "pc_settings.h"
+#endif
+
 static void famicom_emu_initial_common_data() {
     // stubbed
 }
@@ -597,6 +607,94 @@ extern void mSDI_StartInitAfter(GAME* game, int renew_mode, int malloc_flag) {
     mNpc_SendHPMail();
 }
 
+#ifdef TARGET_PC
+/*
+ * PC quick start (settings.ini [QuickStart]): build the state a new town
+ * has once Rover's train ride, Tom Nook's house sale and the part-time
+ * job are over, then load straight into town like a normal continue.
+ * Each block mirrors the original code it replaces. Returns FALSE (and
+ * changes nothing) when the configured names are unusable, in which case
+ * the normal intro plays.
+ */
+static int mSDI_PcQuickStart(void) {
+    Private_c* priv = Common_Get(now_private);
+    int house_no = g_pc_settings.quick_start_house & 3;
+    u8 player_name[PLAYER_NAME_LEN];
+    u8 town_name[LAND_NAME_SIZE];
+    int town_day;
+    int idx;
+    u8 term;
+
+    if (priv == NULL ||
+        pc_settings_encode_game_name(g_pc_settings.quick_start_player_name, player_name, PLAYER_NAME_LEN) == 0 ||
+        pc_settings_encode_game_name(g_pc_settings.quick_start_town_name, town_name, LAND_NAME_SIZE) == 0) {
+        OSReport("[PC] Quick start: invalid player/town name in settings.ini, playing the normal intro\n");
+        return FALSE;
+    }
+
+    /* Rover's questions (aNGD_*): names, gender, and the random face he
+     * gives when his face questions aren't answered. */
+    mem_copy(priv->player_ID.player_name, player_name, PLAYER_NAME_LEN);
+    mLd_CopyLandName(Save_Get(land_info).name, town_name);
+    priv->gender = g_pc_settings.quick_start_gender ? mPr_SEX_FEMALE : mPr_SEX_MALE;
+    priv->face = RANDOM(mPr_FACE_TYPE_NUM);
+
+    /* End of the train ride (aNGD_scene_change_wait_init) */
+    Save_Set(all_grow_renew_time, mTM_rtcTime_clear_code);
+    mLd_CopyLandName(priv->player_ID.land_name, Save_Get(land_info).name);
+    bcopy(Save_GetPointer(land_info), &Save_Get(island).landinfo, sizeof(mLd_land_info_c));
+    mNpc_DecideIslandNpc(&Save_Get(island).animal);
+    lbRTC_TimeCopy(Save_GetPointer(last_grow_time), Common_GetPointer(time.rtc_time));
+    mTM_set_renew_time(Save_GetPointer(renew_time), Common_GetPointer(time.rtc_time));
+    mTM_set_season();
+    Kabu_decide_price_schedule();
+    mPO_post_office_init();
+    Save_Set(insect_term, Common_Get(time.rtc_time.month));
+    Save_Set(insect_term_transition_offset, RANDOM(6));
+    term = Common_Get(time.rtc_time.month) * 2;
+    if (Common_Get(time.rtc_time.day) > 15) {
+        term++;
+    }
+    Save_Set(gyoei_term, term);
+    Save_Set(gyoei_term_transition_offset, RANDOM(6));
+    town_day = 1 + RANDOM(30);
+    if (town_day >= 4) {
+        town_day++; /* never the 4th of July */
+    }
+    Save_Set(town_day, town_day);
+    mSP_ShopGameStartCt(NULL);
+    mNtc_SetInitData();
+    mPr_SetNowPrivateCloth();
+    mEnv_DecideWeather_FirstGameStart();
+    mCD_calendar_clear(-1);
+    mCD_calendar_wellcome_on();
+    mNpc_SetParentNameAllAnimal();
+    mRmTp_SetDefaultLightSwitchData(1);
+
+    /* Tom Nook takes the 1,000 Bells and sells the house
+     * (aNRG_menu_close_wait_talk_proc, aID_retire_rcn_guide_wait) */
+    idx = mPr_GetPossessionItemIdxWithCond(priv, ITM_MONEY_1000, mPr_ITEM_COND_QUEST);
+    if (idx >= 0) {
+        mPr_SetPossessionItem(priv, idx, EMPTY_NO, mPr_ITEM_COND_NORMAL);
+    }
+    mHS_set_use(Common_Get(player_no), house_no);
+    mPr_SetItemCollectBit(priv->cloth.item);
+    mPr_SetItemCollectBit(FTR_START(FTR_SUM_CASSE01));
+    mPr_SetItemCollectBit(ITM_CARPET_START + Save_Get(homes[house_no]).floors[0].wall_floor.flooring_idx);
+    mPr_SetItemCollectBit(ITM_WALL_START + Save_Get(homes[house_no]).floors[0].wall_floor.wallpaper_idx);
+    mHm_SetNowHome();
+    priv->inventory.loan = mPlayer_DEBT0;
+
+    /* Part-time job: the FIRSTJOB/FIRSTINTRO events are simply never set,
+     * so neither Tom Nook's intro nor the job (nor the next-day Happy Room
+     * Academy talk) runs. Load into town like a continued game. */
+    Common_Set(scene_from_title_demo, SCENE_FG);
+
+    OSReport("[PC] Quick start: new town ready, house %d\n", house_no);
+    return TRUE;
+}
+#endif
+
 typedef int (*mSDI_INIT_PROC)(GAME*, int, int);
 
 extern int mSDI_StartInitBefore(GAME* game, int player_no, int init_mode, int malloc_flag) {
@@ -620,6 +718,11 @@ extern int mSDI_StartDataInit(GAME* game, int player_no, int init_mode) {
     res = mSDI_StartInitBefore(game, player_no, init_mode, mSDI_MALLOC_FLAG_ZELDA);
     if (res == TRUE) {
         mSDI_StartInitAfter(game, renew_reserve_mode_table[init_mode], mSDI_MALLOC_FLAG_ZELDA);
+#ifdef TARGET_PC
+        if (init_mode == mSDI_INIT_MODE_NEW && g_pc_settings.quick_start) {
+            mSDI_PcQuickStart();
+        }
+#endif
     }
 
     return res;

@@ -22,6 +22,11 @@ typedef struct {
     int master_volume;    /* Applied at the PC audio output, 0-100 (default 100) */
     int stick_deadzone;   /* Gamepad main stick deadzone, percent 0-40 (default 12) */
     int cstick_deadzone;  /* Gamepad C-stick deadzone, percent 0-40 (default 12) */
+    int quick_start;      /* New town: 0=normal intro, 1=skip train/Tom Nook intro/part-time job */
+    int quick_start_gender; /* Quick start player gender: 0=boy, 1=girl */
+    int quick_start_house;  /* Quick start house: 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right */
+    char quick_start_player_name[32]; /* UTF-8, converted to the game's charset (max 8 characters) */
+    char quick_start_town_name[32];   /* UTF-8, converted to the game's charset (max 8 characters) */
 } PCSettings;
 
 extern PCSettings g_pc_settings;
@@ -30,6 +35,7 @@ void pc_settings_load(void);
 void pc_settings_save(void);
 void pc_settings_apply(void);
 void pc_settings_cycle_resolution(int* width, int* height, int dir);
+int  pc_settings_encode_game_name(const char* utf8, unsigned char* dst, int max_len);
 
 #ifdef __cplusplus
 }
