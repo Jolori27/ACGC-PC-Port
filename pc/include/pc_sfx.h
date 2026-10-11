@@ -14,6 +14,8 @@ extern "C" {
 
 /* Engine running or not, and its revs (0 = idle, 1 = flat out). */
 void pc_sfx_car_engine(int on, f32 revs);
+/* Engine pitch factor (1 = the car, higher = a smaller engine). */
+void pc_sfx_car_engine_pitch(f32 factor);
 /* A short throttle blip (start-up "vroom"). */
 void pc_sfx_car_rev(void);
 /* Horn held down. */

@@ -15,12 +15,19 @@ static SDL_atomic_t s_engine_revs; /* 0..FX_ONE */
 static SDL_atomic_t s_rev_blip;    /* set to 1 to start a blip */
 static SDL_atomic_t s_horn_on;
 static SDL_atomic_t s_skid;        /* 0..FX_ONE */
+static SDL_atomic_t s_pitch;       /* FX_ONE = 1.0 */
 
 void pc_sfx_car_engine(int on, f32 revs) {
     if (revs < 0.0f) revs = 0.0f;
     if (revs > 1.0f) revs = 1.0f;
     SDL_AtomicSet(&s_engine_revs, (int)(revs * FX_ONE));
     SDL_AtomicSet(&s_engine_on, on ? 1 : 0);
+}
+
+void pc_sfx_car_engine_pitch(f32 factor) {
+    if (factor < 0.25f) factor = 0.25f;
+    if (factor > 4.0f) factor = 4.0f;
+    SDL_AtomicSet(&s_pitch, (int)(factor * FX_ONE));
 }
 
 void pc_sfx_car_rev(void) {
@@ -75,6 +82,8 @@ void pc_sfx_mix(s16* stereo, int n, int rate, int vol) {
     float revs_target = (float)SDL_AtomicGet(&s_engine_revs) / FX_ONE;
     int horn_on = SDL_AtomicGet(&s_horn_on);
     float skid_target = (float)SDL_AtomicGet(&s_skid) / FX_ONE;
+    int pitch_fx = SDL_AtomicGet(&s_pitch);
+    float pitch = pitch_fx > 0 ? (float)pitch_fx / FX_ONE : 1.0f;
     float inv_rate = 1.0f / (float)rate;
     float master;
     int i;
@@ -101,7 +110,7 @@ void pc_sfx_mix(s16* stereo, int n, int rate, int vol) {
         s_blip = slew(s_blip, 0.0f, 1.3f * inv_rate);
         if (s_eng_gain > 0.0f) {
             float revs = s_eng_revs + s_blip * 0.55f;
-            float freq = 32.0f + 95.0f * revs;
+            float freq = (32.0f + 95.0f * revs) * pitch;
             float p;
             float saw;
             float chug;

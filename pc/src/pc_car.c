@@ -12,6 +12,7 @@
 #include "pc_settings_menu.h"
 #include "pc_typing.h"
 #include "pc_pause_menu.h"
+#include "pc_scooter_models.h"
 
 #include "libforest/gbi_extensions.h"
 #include "PR/gbi.h"
@@ -23,6 +24,43 @@
 #include "graph.h"
 
 PcCar g_pc_car;
+
+/* Scooters: the riding pose puts the hips 2096 up and 1700 back from the
+ * anchor (see the car's seat notes), so the anchor sits ahead of and below
+ * the saddle. */
+#define SCOOTER_SEAT_Y(m) ((m).seat_y + 100.0f - 2096.0f)
+#define SCOOTER_SEAT_Z(m) ((m).seat_z + 1700.0f)
+#define SCOOTER_DEF(label, m)                                                                                  \
+    {                                                                                                          \
+        label, PC_CAR_SCALE, 0.0f, SCOOTER_SEAT_Y(m), SCOOTER_SEAT_Z(m), 0.0f, (m).box_x_min, (m).box_x_max,  \
+            (m).box_z_min, (m).box_z_max, 7.5f * 2.0f, DEG2SHORT_ANGLE2(16.0f), TRUE, 12.0f, 2,                \
+            (m).wheel_radius * PC_CAR_SCALE, 1.7f                                                              \
+    }
+
+static PcVehicleDef s_defs[PC_VEHICLE_NUM];
+static int s_defs_ready;
+
+const PcVehicleDef* pc_car_def(void) {
+    if (!s_defs_ready) {
+        PcVehicleDef car = { "Gracie's car", PC_CAR_SCALE, PC_CAR_SEAT_X, PC_CAR_SEAT_Y, PC_CAR_SEAT_Z,
+                             PC_CAR_WHEEL_BOTTOM, PC_CAR_BOX_X_MIN, PC_CAR_BOX_X_MAX, PC_CAR_BOX_Z_MIN,
+                             PC_CAR_BOX_Z_MAX, 7.5f * 2.5f, DEG2SHORT_ANGLE2(5.0f), FALSE, 18.0f, 3,
+                             18.57f, 1.0f };
+        PcVehicleDef s0 = SCOOTER_DEF("pizza scooter", g_pc_scooter_models[0]);
+        PcVehicleDef s1 = SCOOTER_DEF("blue scooter", g_pc_scooter_models[1]);
+        PcVehicleDef s2 = SCOOTER_DEF("pink scooter", g_pc_scooter_models[2]);
+
+        s_defs[PC_VEHICLE_CAR] = car;
+        s_defs[PC_VEHICLE_SCOOTER_PIZZA] = s0;
+        s_defs[PC_VEHICLE_SCOOTER_MASCUILO] = s1;
+        s_defs[PC_VEHICLE_SCOOTER_FEMINTINE] = s2;
+        s_defs_ready = TRUE;
+    }
+    if (g_pc_car.type < 0 || g_pc_car.type >= PC_VEHICLE_NUM) {
+        g_pc_car.type = PC_VEHICLE_CAR;
+    }
+    return &s_defs[g_pc_car.type];
+}
 
 static int s_toggle_request;
 
@@ -61,19 +99,23 @@ void pc_car_local_to_world(f32 lx, f32 lz, xyz_t* pos) {
 }
 
 f32 pc_car_box_x_min(void) {
-    return (PC_CAR_BOX_X_MIN - PC_CAR_SEAT_X) * PC_CAR_SCALE;
+    const PcVehicleDef* d = pc_car_def();
+    return (d->box_x_min - d->seat_x) * d->scale;
 }
 
 f32 pc_car_box_x_max(void) {
-    return (PC_CAR_BOX_X_MAX - PC_CAR_SEAT_X) * PC_CAR_SCALE;
+    const PcVehicleDef* d = pc_car_def();
+    return (d->box_x_max - d->seat_x) * d->scale;
 }
 
 f32 pc_car_box_z_min(void) {
-    return (PC_CAR_BOX_Z_MIN - PC_CAR_SEAT_Z) * PC_CAR_SCALE;
+    const PcVehicleDef* d = pc_car_def();
+    return (d->box_z_min - d->seat_z) * d->scale;
 }
 
 f32 pc_car_box_z_max(void) {
-    return (PC_CAR_BOX_Z_MAX - PC_CAR_SEAT_Z) * PC_CAR_SCALE;
+    const PcVehicleDef* d = pc_car_def();
+    return (d->box_z_max - d->seat_z) * d->scale;
 }
 
 /* ---- Model (src/data/model/obj_s_car.c) ---- */
@@ -273,6 +315,7 @@ static bIT_ShadowData_c pc_car_shadow_data = {
  * +X left side), with the body's roll and pitch. lift_y raises the body so
  * the wheels touch the ground; the shadow stays flat on it. */
 static void pc_car_load_aligned(f32 lift_y, int animated) {
+    const PcVehicleDef* d = pc_car_def();
     s_xyz rot = { 0, 0, 0 };
 
     rot.y = g_pc_car.angle;
@@ -281,8 +324,8 @@ static void pc_car_load_aligned(f32 lift_y, int animated) {
         Matrix_RotateX(g_pc_car.pitch, MTX_MULT);
         Matrix_RotateZ(-g_pc_car.roll, MTX_MULT);
     }
-    Matrix_scale(PC_CAR_SCALE, PC_CAR_SCALE, PC_CAR_SCALE, MTX_MULT);
-    Matrix_translate(-PC_CAR_SEAT_X, lift_y, -PC_CAR_SEAT_Z, MTX_MULT);
+    Matrix_scale(d->scale, d->scale, d->scale, MTX_MULT);
+    Matrix_translate(-d->seat_x, lift_y, -d->seat_z, MTX_MULT);
 }
 
 /* ... then undo the 45 degree authoring rotation (model +X+Z diagonal
@@ -328,11 +371,47 @@ static void pc_car_draw_turning(GRAPH* graph, Gfx* list, int mirrored, f32 cx, f
     Matrix_pull();
 }
 
+/* Scooters are drawn as they were modelled (vehicle frame = model
+ * frame), with the two wheels spinning about their hubs. */
+static void pc_scooter_draw(GRAPH* graph) {
+    const PcScooterModel* m = &g_pc_scooter_models[g_pc_car.type - PC_VEHICLE_SCOOTER_PIZZA];
+    int i;
+
+    pc_car_load_aligned(0.0f, TRUE);
+    pc_car_draw_list(graph, m->body);
+
+    for (i = 0; i < 2; i++) {
+        Matrix_push();
+        pc_car_load_aligned(0.0f, TRUE);
+        Matrix_translate(0.0f, m->hub_y, m->hub_z[i], MTX_MULT);
+        Matrix_RotateX(g_pc_car.wheel, MTX_MULT);
+        Matrix_translate(0.0f, -m->hub_y, -m->hub_z[i], MTX_MULT);
+        pc_car_draw_list(graph, m->wheel[i]);
+        Matrix_pull();
+    }
+}
+
 void pc_car_draw(GAME* game) {
     GRAPH* graph = game->graph;
     int mirrored;
 
     if (!g_pc_car.active) {
+        return;
+    }
+
+    if (g_pc_car.type != PC_VEHICLE_CAR) {
+        Matrix_push();
+        _texture_z_light_fog_prim_npc(graph);
+        OPEN_DISP(graph);
+        gDPSetTextureAdjustMode(NEXT_POLY_OPA_DISP, G_TA_DOLPHIN);
+        gDPSetTexEdgeAlpha(NEXT_POLY_OPA_DISP, 127);
+        CLOSE_DISP(graph);
+        pc_scooter_draw(graph);
+        OPEN_DISP(graph);
+        gDPSetTextureAdjustMode(NEXT_POLY_OPA_DISP, G_TA_N64);
+        gDPSetTexEdgeAlpha(NEXT_POLY_OPA_DISP, 144);
+        CLOSE_DISP(graph);
+        Matrix_pull();
         return;
     }
 

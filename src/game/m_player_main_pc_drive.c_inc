@@ -7,7 +7,7 @@
  * wheel, roll and pitch follow the driving; the engine and horn are PC
  * synthesized sounds (pc_sfx.c). */
 
-#define aPCD_TOP_SPEED (7.5f * 2.5f)  /* 250% of the vanilla sprint */
+#define aPCD_TOP_SPEED (pc_car_def()->top_speed)
 #define aPCD_PLAYER_OFS_Y 200.0f     /* Player_actor_ct's draw offset */
 #define aPCD_PUSH_RADIUS 12.0f       /* how close the player gets to the parked car */
 #define aPCD_ENTER_DIST 18.0f        /* A works within this distance of the car body... */
@@ -21,11 +21,11 @@
 #define aPCD_JUMP_OUT_DIST 45.0f
 #define aPCD_JUMP_OUT_OFS_Y (-1760.0f)
 #define aPCD_EXIT_DIST (aPCD_JUMP_OUT_DIST + 1.5f) /* stand-up root motion covers the rest */
-#define aPCD_WHEEL_RADIUS 18.57f     /* world units */
+#define aPCD_WHEEL_RADIUS (pc_car_def()->wheel_radius)
 
 /* Player draw offset that puts the root on the car seat (player scale 0.01). */
 static f32 Player_actor_Pc_drive_seat_ofs_y(void) {
-    return aPCD_PLAYER_OFS_Y + PC_CAR_SEAT_Y * PC_CAR_SCALE / 0.01f;
+    return aPCD_PLAYER_OFS_Y + pc_car_def()->seat_y * pc_car_def()->scale / 0.01f;
 }
 
 static int Player_actor_request_main_pc_drive_all(GAME* game, int prio) {
@@ -351,12 +351,20 @@ static void Player_actor_Movement_Pc_drive(ACTOR* actorx, GAME* game) {
 
     /* ---- body and wheels ---- */
 
-    /* Leans out of the bend, the harder the faster. */
-    roll_target = (s16)(-(f32)turn * speed * 0.9f);
-    if (roll_target > DEG2SHORT_ANGLE2(5.0f)) {
-        roll_target = DEG2SHORT_ANGLE2(5.0f);
-    } else if (roll_target < DEG2SHORT_ANGLE2(-5.0f)) {
-        roll_target = DEG2SHORT_ANGLE2(-5.0f);
+    /* A car leans out of the bend, a scooter into it, the harder the faster. */
+    {
+        const PcVehicleDef* def = pc_car_def();
+        f32 r = -(f32)turn * speed * (0.9f * (f32)def->roll_max / (f32)DEG2SHORT_ANGLE2(5.0f));
+
+        if (def->lean_in) {
+            r = -r;
+        }
+        if (r > (f32)def->roll_max) {
+            r = (f32)def->roll_max;
+        } else if (r < -(f32)def->roll_max) {
+            r = -(f32)def->roll_max;
+        }
+        roll_target = (s16)r;
     }
     /* Nose up pulling away, nose down braking. */
     pitch_target = (s16)((speed - old_speed) * (dt > 0.0f ? 1.0f / dt : 1.0f) * -1400.0f);
@@ -376,6 +384,7 @@ static void Player_actor_Movement_Pc_drive(ACTOR* actorx, GAME* game) {
 
     /* ---- sounds ---- */
     revs = speed / aPCD_TOP_SPEED;
+    pc_sfx_car_engine_pitch(pc_car_def()->engine_pitch);
     pc_sfx_car_engine(TRUE, revs);
     pc_sfx_car_horn(chkButton(BUTTON_X) != 0);
     /* Tyres squeal when the stick asks for a sharp turn at speed. */
@@ -405,8 +414,8 @@ static void Player_actor_Pc_drive_scrape(ACTOR* actorx, const mCoBG_Check_c* bg_
 /* Circles down the car's centre line, as narrow as the player so the car
  * still fits through one-tile gaps; they keep the hood and the boot out of
  * houses, cliffs and water. Offset of circle i from the seat anchor. */
-#define aPCD_PROBE_NUM 3
-#define aPCD_PROBE_RADIUS 18.0f
+#define aPCD_PROBE_NUM (pc_car_def()->probe_num)
+#define aPCD_PROBE_RADIUS (pc_car_def()->probe_radius)
 
 static void Player_actor_Pc_drive_probe_ofs(int i, s16 angle, f32* ox, f32* oz) {
     f32 sn = sin_s(angle);
@@ -508,8 +517,7 @@ static void Player_actor_SetEffect_Pc_drive(ACTOR* actorx, GAME* game) {
         xyz_t pos;
 
         drive_p->timer = 0.0f;
-        pc_car_local_to_world((wheel_x[side] - PC_CAR_SEAT_X) * PC_CAR_SCALE,
-                              (-3750.0f - PC_CAR_SEAT_Z) * PC_CAR_SCALE, &pos);
+        pc_car_local_to_world(wheel_x[side] * pc_car_box_x_max() / 3750.0f, pc_car_box_z_min() + 15.0f, &pos);
         pos.y = actorx->world.position.y;
         eEC_CLIP->effect_make_proc(eEC_EFFECT_DASH_ASIMOTO, pos, 2, actorx->shape_info.rotation.y, game, RSV_NO,
                                    actorx->bg_collision_check.result.unit_attribute, 0);
@@ -899,11 +907,22 @@ static void Player_actor_Pc_car_move_before(ACTOR* actorx, GAME* game) {
     }
 
     if (pc_car_take_toggle_request()) {
-        if (g_pc_car.active) {
+        if (g_pc_car.active && g_pc_car.type + 1 < PC_VEHICLE_NUM) {
+            /* Next vehicle: while driving it swaps under the player; parked,
+             * it is placed again in front of them (the sizes differ). */
+            Player_actor_Pc_car_puff(game);
+            g_pc_car.type++;
+            g_pc_car.ghost = TRUE;
+            if (!g_pc_car.driving && Player_actor_Pc_car_able_place(game) &&
+                Player_actor_Pc_car_in_free_state(main_index)) {
+                Player_actor_Pc_car_spawn(actorx, game);
+            }
+        } else if (g_pc_car.active) {
             Player_actor_Pc_car_puff(game);
             g_pc_car.active = FALSE;
             Player_actor_Pc_drive_sfx_off();
         } else if (Player_actor_Pc_car_able_place(game) && Player_actor_Pc_car_in_free_state(main_index)) {
+            g_pc_car.type = PC_VEHICLE_CAR;
             Player_actor_Pc_car_spawn(actorx, game);
         }
     }
