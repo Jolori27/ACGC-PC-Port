@@ -309,7 +309,13 @@ Keyboard mapping:
 - **C** (gamepad: right stick click) = free camera on/off. While it is on, the C-stick (arrow keys / right stick) orbits the camera around the player (left/right) and zooms (up = closer and lower, down = farther and higher); the game's three fixed camera presets are not stepped while it is on. Toggling it off restores the normal camera. Rebindable in Settings.
 - **Z** in the inventory (pockets page, nothing in hand) = auto-sort the pockets: tools, money, paper, tickets, music, turnips, fruit, plants, fish, insects, furniture, clothes, carpets, wallpapers, then the rest, each group by item number, empty slots last. Delivery and errand items keep their quest data.
 - **Z** in Nook's sell screen = tick every sellable item (press again when everything is ticked to untick all); then A on a ticked item offers "Sell All", exactly as with items ticked one by one with X.
-- **ESC** = pause menu: Resume, Quick Save (saves like the Gyroid's "save and continue"; only outdoors in town with no dialogue, menu or cutscene open, greyed out otherwise), Settings, Quit Game
+- **ESC** = pause menu: Resume, Quick Save, Settings, Quit Game
+- **Quick Save** (pause menu; outdoors in town with no dialogue, menu or cutscene open, greyed out otherwise): the screen fades, the town is torn down exactly as when leaving it, the save is written, and the town reloads with the player on the same spot and facing ("Game saved."). It writes the normal save, without the reset code, so quitting right after it does not bring Mr. Resetti. It also writes `save/quicksave.dat` (player and position), which any other save deletes.
+- **Quick Load** (title menu, faded when there is nothing to load): the normal Continue for the quick-saved player, without the spotlight villager's dialogue, starting on the quick-saved spot (or at the house when Mr. Resetti, a birthday or present demo is due, or the spot changed overnight). A quick-load session does not rewrite the save at start-up, so the same quick save can be loaded again until the next save.
+
+### Save repair
+
+The first version of Quick Save wrote the save while the town was running. Live buildings keep a placeholder in their own tile of the town map (which is the save data) until the town is torn down, so the houses, shops and other buildings around the player were lost on the next load. On Continue, `pc_save_repair_town()` (pc/src/pc_save_repair.c) looks for that damage (placeholders, a reserved tile on the player-house acre's fixed tiles or where the ROM acre template has a building). If found, it copies the save to `DobutsunomoriP_MURA.gci.before_repair` and puts the buildings back from the placeholders, the ROM acre templates, the player-house acre layout and the villagers' homes (lost lot signs get a new sign number). A healthy save is never changed.
 
 SDL2 gamepad with hotplug, analog sticks (deadzone 500), triggers, D-pad, and rumble.
 

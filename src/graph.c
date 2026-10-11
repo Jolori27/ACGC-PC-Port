@@ -30,6 +30,7 @@
 #include "pc_diag.h"
 #include "pc_platform.h"
 #include "pc_pause_menu.h"
+#include "pc_quicksave.h"
 #include "pc_profiler.h"
 extern int g_pc_running;
 #endif

@@ -374,11 +374,6 @@ static int pc_save_write_gci_to(const char* gci_path, const char* tmp_path) {
 
     if (!pc_save_ready) return TRUE;
 
-    /* Any save but a quick save makes the quick-save position stale. */
-    if (!s_quick_writing) {
-        pc_quicksave_invalidate();
-    }
-
     pc_ensure_save_dirs();
 
     Save_Get(save_exist) = TRUE;
@@ -515,6 +510,10 @@ static int pc_save_write_gci_to(const char* gci_path, const char* tmp_path) {
     }
 
     OSReport("[PC] GCI save: written successfully to %s (backups rotated)\n", gci_path);
+    /* Any save but a quick save makes the quick-save position stale. */
+    if (!s_quick_writing) {
+        pc_quicksave_invalidate();
+    }
     return TRUE;
 }
 

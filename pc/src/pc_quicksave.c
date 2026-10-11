@@ -75,8 +75,11 @@ typedef struct {
     u16 cell_item; /* town map item under the player when saved */
     u8 land_name[8];
     u8 player_name[PLAYER_NAME_LEN];
+    u32 pad; /* keeps unix_time at offset 64 with every compiler */
     s64 unix_time;
 } PcQuickSaveRec;
+
+_Static_assert(sizeof(PcQuickSaveRec) == 72, "quicksave.dat layout");
 
 static int s_save_pending;          /* scene change started, write at the end of teardown */
 static PcQuickSaveRec s_save_rec;   /* where the player stood */
@@ -374,7 +377,13 @@ void pc_quickload_door_data(Door_data_c* door) {
         return;
     }
 
-    /* A new day can grow a tree or drop a rock where the player stood. */
+    /* Only a tile that held nothing (or a plain item) when saved: a sapling
+     * or flower can grow into something solid overnight, and the day's
+     * growth may run after this check. And the tile must still be the same. */
+    if (s_load_rec.cell_item != EMPTY_NO && ITEM_NAME_GET_TYPE(s_load_rec.cell_item) != NAME_TYPE_ITEM1) {
+        printf("[QUICKLOAD] the saved spot held %04X, starting at the house\n", s_load_rec.cell_item);
+        return;
+    }
     cell = qs_cell_item(s_load_rec.pos_x, s_load_rec.pos_z);
     if (cell != s_load_rec.cell_item) {
         printf("[QUICKLOAD] the saved spot changed (%04X -> %04X), starting at the house\n", s_load_rec.cell_item,

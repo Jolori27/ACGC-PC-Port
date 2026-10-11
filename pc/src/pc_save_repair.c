@@ -239,6 +239,25 @@ static const struct {
 #define HOME_BX 2
 #define HOME_BZ 1
 
+/* TRUE if a villager's house stands (or should stand) on this tile. */
+static int qs_is_villager_home(int gx, int gz) {
+    int i;
+
+    for (i = 0; i < ANIMAL_NUM_MAX; i++) {
+        Animal_c* animal = Save_GetPointer(animals[i]);
+
+        if (ITEM_NAME_GET_TYPE(animal->id.npc_id) != NAME_TYPE_NPC || animal->home_info.block_x < 1 ||
+            animal->home_info.block_z < 1) {
+            continue;
+        }
+        if ((animal->home_info.block_x - 1) * UT_X_NUM + animal->home_info.ut_x == gx &&
+            (animal->home_info.block_z - 1) * UT_Z_NUM + animal->home_info.ut_z - 1 == gz) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 /* A building of the acre templates whose anchor tile is RSV_NO. That never
  * happens in a healthy save (anchors keep their id; lot signs can become a
  * villager house, so they don't count). */
@@ -261,6 +280,75 @@ static int template_anchor_lost(int gx, int gz, mActor_name_t* t_out) {
     return TRUE;
 }
 
+/* The mayor's bridge, built on the first RSV_BRIDGE0 (else RSV_BRIDGE1) tile
+ * of its acre's template, left as RSV_NO because it was never on screen.
+ * Its six neighbouring tiles are legitimately RSV_NO and are not touched. */
+static int bridge_anchor_lost(int* out_gx, int* out_gz, mActor_name_t* item) {
+    PlusBridge_c* bridge = Save_GetPointer(bridge);
+    int bx;
+    int bz;
+    int pass;
+    int i;
+
+    if (!s_have_tmpl || !bridge->exists || bridge->block_x < 1 || bridge->block_x > FG_BLOCK_X_NUM ||
+        bridge->block_z < 1 || bridge->block_z > FG_BLOCK_Z_NUM) {
+        return FALSE;
+    }
+    bx = bridge->block_x - 1;
+    bz = bridge->block_z - 1;
+
+    for (i = 0; i < UT_TOTAL_NUM; i++) {
+        mActor_name_t v = Save_Get(fg[bz][bx]).items[i >> 4][i & 15];
+
+        if (v == BRIDGE_A0 || v == BRIDGE_A1 || v == DUMMY_BRIDGE) {
+            return FALSE; /* the bridge is there */
+        }
+    }
+
+    /* the same search order as the bridge event (bridge_make_in) */
+    for (pass = 0; pass < 2; pass++) {
+        mActor_name_t marker = pass == 0 ? RSV_BRIDGE0 : RSV_BRIDGE1;
+
+        for (i = 0; i < UT_TOTAL_NUM; i++) {
+            if (s_tmpl[bz][bx].items[i >> 4][i & 15] == marker) {
+                if (Save_Get(fg[bz][bx]).items[i >> 4][i & 15] != RSV_NO) {
+                    return FALSE;
+                }
+                *out_gx = bx * UT_X_NUM + (i & 15);
+                *out_gz = bz * UT_Z_NUM + (i >> 4);
+                *item = pass == 0 ? BRIDGE_A0 : BRIDGE_A1;
+                return TRUE;
+            }
+        }
+    }
+    return FALSE;
+}
+
+/* A lot-based event structure (fortune teller's tent, designer car, igloo,
+ * camper's tent, Redd's tent) that was never on screen: a 3x3 of RSV_NO on
+ * a lot. The game removes it with every save (mEv_finish), so a healthy save
+ * never has one; a villager house on a lot keeps its id and signboard. */
+static int event_lot_left(int gx, int gz) {
+    mActor_name_t t = tmpl_at(gx, gz);
+    int dx;
+    int dz;
+
+    if (*fg_at(gx, gz) != RSV_NO || t < SIGN00 || t > SIGN20) {
+        return FALSE;
+    }
+    if (gx % UT_X_NUM < 1 || gx % UT_X_NUM > UT_X_NUM - 2 || gz % UT_Z_NUM < 1 || gz % UT_Z_NUM > UT_Z_NUM - 2) {
+        return FALSE;
+    }
+    for (dz = -1; dz <= 1; dz++) {
+        for (dx = -1; dx <= 1; dx++) {
+            if (*fg_at(gx + dx, gz + dz) != RSV_NO) {
+                return FALSE;
+            }
+        }
+    }
+    return !qs_is_villager_home(gx, gz);
+}
+
 static int damage_evidence(void) {
     int gx;
     int gz;
@@ -268,7 +356,8 @@ static int damage_evidence(void) {
 
     for (gz = 0; gz < FG_UNITS_Z; gz++) {
         for (gx = 0; gx < FG_UNITS_X; gx++) {
-            if (is_placeholder(*fg_at(gx, gz)) || (s_have_tmpl && template_anchor_lost(gx, gz, NULL))) {
+            if (is_placeholder(*fg_at(gx, gz)) ||
+                (s_have_tmpl && (template_anchor_lost(gx, gz, NULL) || event_lot_left(gx, gz)))) {
                 return TRUE;
             }
         }
@@ -280,25 +369,14 @@ static int damage_evidence(void) {
         }
     }
 
-    return FALSE;
-}
+    {
+        mActor_name_t item;
 
-/* TRUE if a villager's house stands (or should stand) on this tile. */
-static int qs_is_villager_home(int gx, int gz) {
-    int i;
-
-    for (i = 0; i < ANIMAL_NUM_MAX; i++) {
-        Animal_c* animal = Save_GetPointer(animals[i]);
-
-        if (ITEM_NAME_GET_TYPE(animal->id.npc_id) != NAME_TYPE_NPC || animal->home_info.block_x < 1 ||
-            animal->home_info.block_z < 1) {
-            continue;
-        }
-        if ((animal->home_info.block_x - 1) * UT_X_NUM + animal->home_info.ut_x == gx &&
-            (animal->home_info.block_z - 1) * UT_Z_NUM + animal->home_info.ut_z - 1 == gz) {
+        if (bridge_anchor_lost(&gx, &gz, &item)) {
             return TRUE;
         }
     }
+
     return FALSE;
 }
 
@@ -436,6 +514,49 @@ int pc_save_repair_town(void) {
                 }
                 set_tile(gx, gz, t, "acre template");
                 free_door_tiles(t, gx, gz);
+            }
+        }
+
+        {
+            mActor_name_t bridge;
+
+            if (bridge_anchor_lost(&gx, &gz, &bridge)) {
+                set_tile(gx, gz, bridge, "bridge");
+            }
+        }
+
+        /* The police officer reserves the tile two units right of the
+         * police box and frees it only in its save proc. */
+        for (gz = 0; gz < FG_UNITS_Z; gz++) {
+            for (gx = 0; gx < FG_UNITS_X; gx++) {
+                mActor_name_t* p = fg_at(gx + 2, gz);
+
+                if (*fg_at(gx, gz) == POLICE_STATION && p != NULL && *p == RSV_NO && tmpl_at(gx + 2, gz) != RSV_NO) {
+                    set_tile(gx + 2, gz, EMPTY_NO, "police officer's spot");
+                }
+            }
+        }
+
+        /* Lot event structures never on screen: remove them the way the game
+         * does (mFI_SetFGStructure_common REMOVE): free the 3x3 and the door
+         * tile, then put a lot sign back. */
+        for (gz = 0; gz < FG_UNITS_Z; gz++) {
+            for (gx = 0; gx < FG_UNITS_X; gx++) {
+                int dx;
+                int dz;
+
+                if (!event_lot_left(gx, gz)) {
+                    continue;
+                }
+                for (dz = -1; dz <= 1; dz++) {
+                    for (dx = -1; dx <= 1; dx++) {
+                        if (dx != 0 || dz != 0) {
+                            set_tile(gx + dx, gz + dz, EMPTY_NO, "event structure fill");
+                        }
+                    }
+                }
+                free_reserved(gx, gz + 2);
+                set_tile(gx, gz, mFM_GetReseveName(gx / UT_X_NUM + 1, gz / UT_Z_NUM + 1), "lot sign (event)");
             }
         }
 
