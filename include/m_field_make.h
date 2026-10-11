@@ -339,6 +339,9 @@ extern void mFM_FieldInit(GAME_PLAY* play);
 extern void mFM_Field_dt();
 extern void mFM_SetBlockKindLoadCombi();
 extern void mFM_InitFgCombiSaveData(GAME* game);
+#ifdef TARGET_PC
+extern int mFM_PcGetTownFgTemplate(mFM_fg_c out[FG_BLOCK_Z_NUM][FG_BLOCK_X_NUM]);
+#endif
 extern void mFM_RenewalReserve();
 extern mActor_name_t mFM_GetReseveName(int bx, int bz);
 extern void mFM_toSummer();

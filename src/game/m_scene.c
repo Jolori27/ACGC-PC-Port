@@ -10,6 +10,9 @@
 #include "m_card.h"
 #include "m_submenu.h"
 #include "m_scene_ftr.h"
+#ifdef TARGET_PC
+#include "pc_quicksave.h"
+#endif
 
 static void mSc_set_bank_status_after(Object_Bank_c* bank) {
     bank->bank_id = ABS(bank->bank_id);
@@ -407,6 +410,17 @@ static void Scene_Proc_Player_Ptr(GAME_PLAY* play, Scene_Word_u* scene_data) {
     if (Common_Get(door_data).next_scene_id != 0) {
         mem_copy((u8*)&data->position, (u8*)&Common_Get(door_data).exit_position, sizeof(s_xyz));
         data->rotation.y = angle_table[Common_Get(door_data).exit_orientation];
+#ifdef TARGET_PC
+        {
+            /* Quick save / quick load: keep the exact facing, not the
+             * nearest of the 8 door directions. */
+            s16 pc_angle;
+
+            if (pc_spawn_angle_take(&pc_angle)) {
+                data->rotation.y = pc_angle;
+            }
+        }
+#endif
     }
 
     data->arg = Common_Get(door_data).extra_data;

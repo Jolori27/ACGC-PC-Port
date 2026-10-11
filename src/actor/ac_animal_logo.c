@@ -25,6 +25,7 @@
 #include "pc_settings.h"
 #include "pc_settings_menu.h"
 #include "pc_menu_util.h"
+#include "pc_quicksave.h"
 #include "main.h"
 #include <stdio.h>
 #endif
@@ -119,6 +120,12 @@ static void aAL_actor_ct(ACTOR* actor, GAME* game) {
   cKF_SkeletonInfo_R_ct(&skeleton_info->skeleton, &cKF_bs_r_logo_us_sing, NULL, skeleton_info->work_area_p, skeleton_info->morph_area_p);
 
   aAL_setupAction(logo_actor, (GAME*)play, aAL_ACTION_IN);
+
+#ifdef PC_ENHANCEMENTS
+  /* Title menu: is there a quick save that can be loaded? */
+  pc_quickload_cancel();
+  pc_quickload_refresh();
+#endif
 }
 
 static void aAL_actor_dt(ACTOR* actor, GAME* game) {
@@ -388,7 +395,7 @@ static void aAL_pc_game_start_wait(ANIMAL_LOGO_ACTOR* actor, GAME* game) {
     return;
   }
 
-  /* Main menu navigation (3 items: Start / Options / Quit) */
+  /* Main menu navigation (4 items: Start / Quick Load / Options / Quit) */
   if (actor->pc_cursor_cooldown <= 0.0f) {
     if (stick_y > 30 || (on_btn & BUTTON_DUP)) {
       if (actor->pc_menu_sel > 0) {
@@ -396,7 +403,7 @@ static void aAL_pc_game_start_wait(ANIMAL_LOGO_ACTOR* actor, GAME* game) {
         actor->pc_cursor_cooldown = 10.0f;
       }
     } else if (stick_y < -30 || (on_btn & BUTTON_DDOWN)) {
-      if (actor->pc_menu_sel < 2) {
+      if (actor->pc_menu_sel < 3) {
         actor->pc_menu_sel++;
         actor->pc_cursor_cooldown = 10.0f;
       }
@@ -413,12 +420,21 @@ static void aAL_pc_game_start_wait(ANIMAL_LOGO_ACTOR* actor, GAME* game) {
           aAL_setupAction(actor, game, aAL_ACTION_FADE_OUT_START);
         }
         break;
-      case 1: /* Options */
+      case 1: /* Quick Load: the normal start, then straight to the saved spot */
+        if (pc_quickload_available() &&
+            mLd_CheckStartFlag() == TRUE &&
+            aAL_wipe_end_check(game) == TRUE &&
+            mTD_tdemo_button_ok_check()) {
+          pc_quickload_request();
+          aAL_setupAction(actor, game, aAL_ACTION_FADE_OUT_START);
+        }
+        break;
+      case 2: /* Options */
         actor->pc_options_open = 1;
         actor->pc_cursor_cooldown = 10.0f;
         pc_settings_menu_enter();
         break;
-      case 2: /* Quit Game */
+      case 3: /* Quit Game */
         g_pc_running = 0;
         actor->pc_cursor_cooldown = 10.0f;
         break;
@@ -795,7 +811,7 @@ static void aAL_pc_menu_draw(ANIMAL_LOGO_ACTOR* actor, GAME* game) {
   static const u32 dim_g[5] = {  40,  50,  40,  50,  50 };
   static const u32 dim_b[5] = {  40,  30,  60,  70,  60 };
 
-  static const char* const labels[3] = { "Start Game", "Options", "Quit Game" }; // me when const
+  static const char* const labels[4] = { "Start Game", "Quick Load", "Options", "Quit Game" }; // me when const
 
   f32 y_base = 135.0f;
   f32 line_h = 18.0f;
@@ -804,13 +820,15 @@ static void aAL_pc_menu_draw(ANIMAL_LOGO_ACTOR* actor, GAME* game) {
   /* Hide the title's main menu items while the Options overlay is open, else
    * Start/Options/Quit bleed through the dimmed backdrop. */
   if (!actor->pc_options_open) {
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
       int on = (sel == i);
+      /* Quick Load is faded out when there is no quick save to load. */
+      int a = (i == 1 && !pc_quickload_available()) ? (on ? 120 : 90) : (on ? 255 : 220);
       pc_menu_draw_centered(game, labels[i], y_base + i * line_h,
         on ? sel_r[td] : dim_r[td],
         on ? sel_g[td] : dim_g[td],
         on ? sel_b[td] : dim_b[td],
-        on ? 255 : 220,
+        a,
         on ? PC_MENU_SCALE_SELECTED : 1.0f);
     }
   }

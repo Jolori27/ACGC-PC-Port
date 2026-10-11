@@ -398,6 +398,12 @@ extern void play_cleanup(GAME* game) {
 
     mHsRm_GetHuusuiRoom(NULL, Common_Get(player_no));
     mFM_Field_dt();
+#ifdef TARGET_PC
+    /* The town is fully torn down: every actor has run its save proc and
+     * put its real item back into the map. A pending quick save is written
+     * now, exactly as the Gyroid's save scene would find the data. */
+    pc_quicksave_on_play_cleanup();
+#endif
     mCD_toNextLand();
     mEA_CleanCardDLProgram();
 

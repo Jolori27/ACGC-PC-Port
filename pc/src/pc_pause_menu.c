@@ -37,7 +37,7 @@ typedef enum {
 static PauseMenuPage cur_page = PAGE_MAIN;
 static int main_sel = 0;    /* 0=Resume, 1=Quick Save, 2=Settings, 3=Quit Game */
 static int confirm_sel = 0; /* 0=No (default), 1=Yes */
-static int save_result = PC_QUICKSAVE_OK;
+static int save_result = PC_QUICKSAVE_OK; /* last quick save request */
 
 void pc_pause_menu_toggle(void) {
     if (!g_pc_paused && (g_pc_title_main_menu_visible || g_pc_nes_active)) return;
@@ -58,9 +58,13 @@ static void main_activate(void) {
         case 0: /* Resume */
             pc_pause_menu_toggle();
             break;
-        case 1: /* Quick Save */
-            save_result = pc_quicksave_do();
-            cur_page = PAGE_SAVE_RESULT;
+        case 1: /* Quick Save: fades out, saves, reloads the town on the spot */
+            save_result = pc_quicksave_request();
+            if (save_result == PC_QUICKSAVE_OK) {
+                pc_pause_menu_toggle();
+            } else {
+                cur_page = PAGE_SAVE_RESULT;
+            }
             break;
         case 2: /* Settings */
             cur_page = PAGE_SETTINGS;
@@ -238,24 +242,13 @@ static void draw_main_page(struct game_s* game) {
     }
 }
 
+/* Only shown when the quick save was refused; a successful one closes the
+ * menu and confirms on screen after the town reloads. */
 static void draw_save_result_page(struct game_s* game) {
-    const char* msg;
-
     pc_menu_draw_centered(game, "- Quick Save -", 80.0f, 255, 255, 255, 255, 1.0f);
-    switch (save_result) {
-        case PC_QUICKSAVE_OK:
-            msg = "Game saved.";
-            break;
-        case PC_QUICKSAVE_FAILED:
-            msg = "Save failed! Check the save folder.";
-            break;
-        default:
-            msg = "Can't save here.";
-            pc_menu_draw_centered(game, "Go outside in town, close every window and try again.", 130.0f, 200, 200,
-                                  200, 255, 0.8f);
-            break;
-    }
-    pc_menu_draw_centered(game, msg, 115.0f, 230, 230, 230, 255, 1.0f);
+    pc_menu_draw_centered(game, "Can't save here.", 115.0f, 230, 230, 230, 255, 1.0f);
+    pc_menu_draw_centered(game, "Go outside in town, close every window and try again.", 130.0f, 200, 200, 200, 255,
+                          0.8f);
     pc_menu_draw_centered(game, "OK", 150.0f, 255, 255, 255, 255, PC_MENU_SCALE_SELECTED);
 }
 

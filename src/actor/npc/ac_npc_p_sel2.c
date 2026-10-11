@@ -12,6 +12,9 @@
 #include "m_bgm.h"
 #include "m_timeIn_ovl.h"
 #include "dolphin/os/OSRtc.h"
+#ifdef TARGET_PC
+#include "pc_quicksave.h"
+#endif
 
 enum {
     aNPS2_TALK_SETUP_YURE,
@@ -186,6 +189,10 @@ static void aNPS2_actor_move(ACTOR* actorx, GAME* game) {
 static void aNPS2_actor_draw(ACTOR* actorx, GAME* game) {
     CLIP(npc_clip)->draw_proc(actorx, game);
 }
+
+#ifdef TARGET_PC
+static int aNPS2_pc_quickload_start(NPC_P_SEL2_ACTOR* p_sel2, GAME_PLAY* play);
+#endif
 
 #include "../src/actor/npc/ac_npc_p_sel2_schedule.c_inc"
 #include "../src/actor/npc/ac_npc_p_sel2_talk.c_inc"

@@ -15,6 +15,8 @@
 #include "m_bgm.h"
 #ifdef TARGET_PC
 #include "pc_bswap.h"
+#include <stdlib.h>
+#include <string.h>
 /* Byte-swap all u16 fields in FG data loaded from big-endian ARAM. */
 static void mFM_ByteSwapFGData(mFM_fg_data_c* data, int count) {
     int ei, zi, xi;
@@ -1430,6 +1432,66 @@ static mFM_combination_c l_combiID[BLOCK_TOTAL_NUM] = {
 
 u8* g_block_type_p = l_block_type;
 int* g_block_kind_p = l_block_kind;
+
+#ifdef TARGET_PC
+/* PC save repair (pc_save_repair.c): the ROM template item of every town
+ * tile, i.e. what mFM_InitFgCombiSaveData put there when the town was made,
+ * for the town's current block layout. Read-only: the save is not touched.
+ * Returns FALSE if the template resource can't be read. */
+extern int mFM_PcGetTownFgTemplate(mFM_fg_c out[FG_BLOCK_Z_NUM][FG_BLOCK_X_NUM]) {
+    size_t fg_datasize = JW_GetResSizeFileNo(RESOURCE_FGDATA);
+    size_t fg_datasize_align = ALIGN_NEXT(fg_datasize, 32);
+    u8* raw;
+    mFM_fg_data_c* fg_data_p;
+    mFM_fg_data_c** sorted;
+    int fg_data_num;
+    int bz;
+    int bx;
+
+    if (fg_datasize == 0) {
+        return FALSE;
+    }
+
+    raw = (u8*)malloc(fg_datasize_align + 32);
+    sorted = (mFM_fg_data_c**)malloc(mFM_FG_NUM * sizeof(mFM_fg_data_c*));
+    if (raw == NULL || sorted == NULL) {
+        free(raw);
+        free(sorted);
+        return FALSE;
+    }
+
+    fg_data_p = (mFM_fg_data_c*)ALIGN_NEXT((u32)raw, 32);
+    fg_data_num = fg_datasize / sizeof(mFM_fg_data_c);
+    _JW_GetResourceAram(JW_GetAramAddress(RESOURCE_FGDATA), (u8*)fg_data_p, fg_datasize_align);
+    mFM_ByteSwapFGData(fg_data_p, fg_data_num);
+    mFM_SortFGData(sorted, fg_data_p, mFM_FG_NUM, fg_data_num, 0);
+
+    for (bz = 0; bz < FG_BLOCK_Z_NUM; bz++) {
+        for (bx = 0; bx < FG_BLOCK_X_NUM; bx++) {
+            int combi = Save_Get(combi_table[bz + 1][bx + 1]).combination_type;
+            mFM_fg_data_c* src = NULL;
+
+            if (combi >= 0 && combi < data_combi_table_number) {
+                int fg_id = data_combi_table[combi].fg_id;
+
+                if (fg_id >= 0 && fg_id < mFM_FG_NUM) {
+                    src = sorted[fg_id];
+                }
+            }
+
+            if (src != NULL) {
+                mFM_FgUtDataSet(out[bz][bx].items[0], src->items[0]);
+            } else {
+                memset(out[bz][bx].items, 0, sizeof(out[bz][bx].items)); /* EMPTY_NO */
+            }
+        }
+    }
+
+    free(sorted);
+    free(raw);
+    return TRUE;
+}
+#endif
 
 extern void mFM_InitFgCombiSaveData(GAME* game) {
     GameAlloc* game_alloc_p = NULL;

@@ -10,6 +10,9 @@
 #include "m_titledemo.h"
 #include "m_event.h"
 #include "m_scene_table.h"
+#ifdef TARGET_PC
+#include "pc_quicksave.h"
+#endif
 #include "libultra/libultra.h"
 #include "m_cpak.h"
 
@@ -103,6 +106,12 @@ extern void title_action_data_init_start_select(GAME_PLAY* play) {
     mTM_clear_renew_is();
     mNpc_ClearAnimalInfo(mNpc_GetInAnimalP());
     play->next_scene_no = decide_next_scene_no();
+#ifdef TARGET_PC
+    /* Quick Load only works through the normal player select of a saved town. */
+    if (play->next_scene_no != SCENE_PLAYERSELECT_2) {
+        pc_quickload_cancel();
+    }
+#endif
 
     {
         int rtc_enabled = Common_Get(time.rtc_enabled);

@@ -1,6 +1,13 @@
 static void aNPS2_think_main_proc(NPC_ACTOR* nactorx, GAME_PLAY* play) {
     NPC_P_SEL2_ACTOR* p_sel2 = (NPC_P_SEL2_ACTOR*)nactorx;
 
+#ifdef TARGET_PC
+    /* Quick Load (title menu): skip the talk and load the saved player. */
+    if (!p_sel2->talk_end_flag && pc_quickload_requested() && aNPS2_pc_quickload_start(p_sel2, play)) {
+        return;
+    }
+#endif
+
     if (nactorx->action.step == aNPC_ACTION_END_STEP && !p_sel2->talk_end_flag) {
         nactorx->talk_info.talk_request_proc = &aNPS2_talk_request;
     }

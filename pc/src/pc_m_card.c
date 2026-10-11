@@ -26,6 +26,7 @@
 #include "zurumode.h"
 #include "pc_save_bswap.h"
 #include "pc_settings.h"
+#include "pc_quicksave.h"
 #include "m_cockroach.h"
 #include "m_all_grow_ovl.h"
 #include "m_home.h"
@@ -237,6 +238,8 @@ static void pc_ensure_save_dirs(void) {
 }
 
 static int pc_save_write_gci_to(const char* gci_path, const char* tmp_path);
+static int pc_save_write_gci(void);
+static int pc_read_gci_land_info(const char* path, Save_t* out);
 
 /* mCD_get_land_copyProtect */
 static u16 pc_get_land_copy_protect(void) {
@@ -296,6 +299,67 @@ int pc_save_is_ready(void) {
     return pc_save_ready;
 }
 
+/* PC quick save (pc_quicksave.c). It runs at the end of the town's teardown
+ * (play_cleanup), when every actor has run its save proc and put its real
+ * item back into the town map: Save_t is as clean as when the Gyroid's save
+ * scene writes it. Like the Gyroid's "save and continue" it leaves the
+ * Wisp pieces and the money rock alone. Unlike it, the file is written with
+ * the reset code cleared, so quitting right after a quick save does not
+ * bring Mr. Resetti; the code in RAM is left as it was. */
+static int s_quick_writing; /* the write in progress is a quick save */
+
+int pc_save_quick_write(void) {
+    Private_c* priv = Now_Private;
+    u32 code = 0;
+    u16 copy_protect;
+    int ok;
+
+    if (!pc_save_ready || mCD_GetThisLandSlotNo() == mCD_SLOT_B) {
+        return FALSE;
+    }
+
+    mCkRh_SavePlayTime(Common_Get(player_no));
+    copy_protect = pc_get_land_copy_protect();
+    Common_Set(copy_protect, copy_protect);
+    Save_Set(copy_protect, copy_protect);
+    Save_Set(travel_hard_time, lbRTC_HardTime());
+
+    if (priv != NULL) {
+        code = priv->reset_code;
+        priv->reset_code = 0;
+    }
+    s_quick_writing = TRUE;
+    ok = pc_save_write_gci();
+    s_quick_writing = FALSE;
+    if (priv != NULL) {
+        priv->reset_code = code;
+    }
+
+    return ok;
+}
+
+/* Title menu: the token that ties save/quicksave.dat to the save on disk,
+ * and whether the given player exists in it. Reads the file without
+ * touching the game's memory. */
+int pc_save_peek_token(u16* land_id, u16* copy_protect, OSTime* hard_time, int player_no, int* exists) {
+    Save_t* save = (Save_t*)malloc(sizeof(Save_t));
+    int ok;
+
+    if (save == NULL) {
+        return FALSE;
+    }
+    ok = pc_read_gci_land_info(PC_GCI_PATH, save);
+    if (ok) {
+        *land_id = save->land_info.id;
+        *copy_protect = save->copy_protect;
+        *hard_time = save->travel_hard_time;
+        *exists = player_no >= 0 && player_no < PLAYER_NUM && save->private_data[player_no].exists &&
+                  !mPr_NullCheckPersonalID(&save->private_data[player_no].player_ID);
+    }
+    free(save);
+    return ok;
+}
+
 static int pc_save_write_gci(void) {
     return pc_save_write_gci_to(PC_GCI_PATH, PC_GCI_TMP_PATH);
 }
@@ -309,6 +373,11 @@ static int pc_save_write_gci_to(const char* gci_path, const char* tmp_path) {
     u8* others_ptr;
 
     if (!pc_save_ready) return TRUE;
+
+    /* Any save but a quick save makes the quick-save position stale. */
+    if (!s_quick_writing) {
+        pc_quicksave_invalidate();
+    }
 
     pc_ensure_save_dirs();
 
@@ -848,14 +917,18 @@ int mCD_InitGameStart_bg(int player_no, int card_private_idx, int start_cond, s3
                                  Now_Private->reset_count);
                     }
                 }
-                /* Arm reset code: if player quits without saving, next load detects it */
-                pc_set_reset_code(Now_Private);
+                /* Arm reset code: if player quits without saving, next load detects it.
+                 * A quick load does not arm it or write the save, so the same
+                 * quick save can be loaded again until the player saves. */
+                if (!pc_quickload_in_progress()) {
+                    pc_set_reset_code(Now_Private);
+                }
 
                 /* GC writes the save (armed code included) back to the card
                  * here (bg_write_main/bg_write_bk). Persist to disk or the
                  * armed code never survives a quit and Resetti can't trigger.
                  * Cond 1 only - matches GC (new players aren't saved yet). */
-                if (start_cond == mCD_START_COND_1) {
+                if (start_cond == mCD_START_COND_1 && !pc_quickload_in_progress()) {
                     u16 copy_protect = pc_get_land_copy_protect();
                     Common_Set(copy_protect, copy_protect);
                     Save_Set(copy_protect, copy_protect);

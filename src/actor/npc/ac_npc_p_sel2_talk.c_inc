@@ -549,9 +549,18 @@ static int aNPS2_setup_game_start(NPC_P_SEL2_ACTOR* p_sel2, GAME_PLAY* play) {
     u8 has_map;
 
     aNPS2_make_door_data(&door_data, type, p_sel2);
+#ifdef TARGET_PC
+    if (type == aNPS2_DOOR_EXIT_TYPE_HOME) {
+        /* Quick Load: the saved spot instead of the house door, when safe. */
+        pc_quickload_door_data(&door_data);
+    }
+#endif
     if (goto_other_scene(play, &door_data, TRUE) != TRUE) {
         return FALSE;
     }
+#ifdef TARGET_PC
+    pc_quickload_done();
+#endif
 
     mBGMPsComp_make_ps_wipe(0x11C2);
     has_map = FALSE;
@@ -609,6 +618,53 @@ static int aNPS2_setup_load_data(NPC_P_SEL2_ACTOR* p_sel2, GAME_PLAY* play) {
 
     return mCD_InitGameStart_bg(p_sel2->player_no, p_sel2->card_file_idx, data_p->type, &result);
 }
+
+#ifdef TARGET_PC
+/* Quick Load: do what the spotlight villager's talk does when the player
+ * picks their name and answers "Yes!" (aNPS2_game_start_wait), without the
+ * talk. Returns FALSE to fall back to the normal talk. */
+static int aNPS2_pc_quickload_start(NPC_P_SEL2_ACTOR* p_sel2, GAME_PLAY* play) {
+    int pl_no = pc_quickload_begin();
+
+    if (pl_no < 0 || pl_no >= PLAYER_NUM || !Save_Get(private_data[pl_no]).exists ||
+        mPr_NullCheckPersonalID(&Save_Get(private_data[pl_no]).player_ID)) {
+        pc_quickload_cancel();
+        return FALSE;
+    }
+
+    p_sel2->player_no = pl_no;
+    p_sel2->card_file_idx = -1;
+    p_sel2->talk_idx = aNPS2_TALK_START_TYPE0;
+    aNPS2_set_str_ct_player_name(pl_no);
+
+    /* If the current time is before the last save time, the player "cheated" */
+    if (lbRTC_IsOverTime(&Save_Get(save_check).time, Common_GetPointer(time.rtc_time)) == lbRTC_LESS) {
+        Save_Set(cheated_flag, TRUE);
+        Save_Set(npc_force_go_home, TRUE);
+    }
+
+    aNPS2_time_check();
+    if (aNPS2_chk_setup_birthday_demo() == TRUE) {
+        Now_Private->state_flags |= mPr_FLAG_BIRTHDAY_ACTIVE;
+    } else {
+        Now_Private->state_flags &= ~mPr_FLAG_BIRTHDAY_ACTIVE;
+    }
+
+    if (aNPS2_setup_load_data(p_sel2, play) != mCD_TRANS_ERR_NONE) {
+        pc_quickload_cancel();
+        return FALSE;
+    }
+
+    p_sel2->talk_end_flag = TRUE;
+    p_sel2->start_flag = TRUE;
+    /* Keep the screen black: the spotlight villager has nothing to say. */
+    play->fade_color_value.c.r = 0;
+    play->fade_color_value.c.g = 0;
+    play->fade_color_value.c.b = 0;
+    play->fade_color_value.c.a = 255;
+    return TRUE;
+}
+#endif
 
 static void aNPS2_setup_yure(NPC_P_SEL2_ACTOR* p_sel2, GAME_PLAY* play) {
     if (aNPS2_setup_yure_option() == TRUE) {
