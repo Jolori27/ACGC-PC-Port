@@ -52,6 +52,7 @@ int pc_spawn_angle_take(s16* angle);
 
 /* A short message at the top of the screen for a few seconds. */
 void pc_quicksave_toast(const char* text);
+void pc_quicksave_toast_ms(const char* text, unsigned int ms);
 /* graph.c: draws the message after the frame's own drawing. */
 void pc_quicksave_draw(struct game_s* game);
 

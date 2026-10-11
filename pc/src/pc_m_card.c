@@ -898,6 +898,12 @@ int mCD_InitGameStart_bg(int player_no, int card_private_idx, int start_cond, s3
             if (start_cond >= 0 && start_cond < 5) {
                 mode = init_mode_table[start_cond];
             }
+            /* Towns saved by the first PC quick save lost the buildings
+             * around the player: put them back before the town is set up. */
+            if (start_cond == mCD_START_COND_1) {
+                extern int pc_save_repair_town(void);
+                pc_save_repair_town();
+            }
             mSDI_StartDataInit(gamePT, player_no, mode);
             l_mcd_keep_startCond = start_cond;
             pc_save_ready = 1;

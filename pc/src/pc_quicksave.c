@@ -418,9 +418,13 @@ int pc_spawn_angle_take(s16* angle) {
 static const char* s_toast_text;
 static Uint32 s_toast_until;
 
-void pc_quicksave_toast(const char* text) {
+void pc_quicksave_toast_ms(const char* text, unsigned int ms) {
     s_toast_text = text;
-    s_toast_until = SDL_GetTicks() + 3500;
+    s_toast_until = SDL_GetTicks() + ms;
+}
+
+void pc_quicksave_toast(const char* text) {
+    pc_quicksave_toast_ms(text, 3500);
 }
 
 void pc_quicksave_draw(struct game_s* game) {
