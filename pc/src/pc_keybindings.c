@@ -32,6 +32,7 @@ static const PCKeybindings s_kb_defaults = {
 
     /* PC actions. Tab sits at the same place on QWERTY/AZERTY/QWERTZ. */
     .minimap = SDL_SCANCODE_TAB,
+    .freecam = SDL_SCANCODE_C,
 };
 
 /* Back/Select is reserved for opening the PC pause menu, so it is not a
@@ -50,6 +51,7 @@ static const PCPadBindings s_pad_defaults = {
     .dpad_left  = SDL_CONTROLLER_BUTTON_DPAD_LEFT,
     .dpad_right = SDL_CONTROLLER_BUTTON_DPAD_RIGHT,
     .minimap    = SDL_CONTROLLER_BUTTON_LEFTSHOULDER,
+    .freecam    = SDL_CONTROLLER_BUTTON_RIGHTSTICK,
 };
 
 PCKeybindings g_pc_keybindings;
@@ -87,6 +89,7 @@ static const KeybindEntry s_entries[] = {
     KB_ENTRY("DPad_Left",    dpad_left),
     KB_ENTRY("DPad_Right",   dpad_right),
     KB_ENTRY("Minimap",      minimap),
+    KB_ENTRY("FreeCam",      freecam),
 };
 
 #define NUM_ENTRIES (sizeof(s_entries) / sizeof(s_entries[0]))
@@ -108,6 +111,7 @@ static const KeybindEntry s_pad_entries[] = {
     PAD_ENTRY("Pad_DPad_Left",  dpad_left),
     PAD_ENTRY("Pad_DPad_Right", dpad_right),
     PAD_ENTRY("Pad_Minimap",    minimap),
+    PAD_ENTRY("Pad_FreeCam",    freecam),
 };
 
 #define NUM_PAD_ENTRIES (sizeof(s_pad_entries) / sizeof(s_pad_entries[0]))
@@ -307,9 +311,18 @@ void pc_keybindings_save(void) {
     printf("[Keybindings] Saved %s\n", KEYBINDINGS_FILE);
 }
 
+/* The PC actions, which must not take a GameCube button's key. */
+static int kb_is_pc_action(int offset) {
+    return offset == (int)offsetof(PCKeybindings, minimap) || offset == (int)offsetof(PCKeybindings, freecam);
+}
+
+static int pad_is_pc_action(int offset) {
+    return offset == (int)offsetof(PCPadBindings, minimap) || offset == (int)offsetof(PCPadBindings, freecam);
+}
+
 static int kb_code_used_by_game(PCInputCode code) {
     for (int i = 0; i < (int)NUM_ENTRIES; i++) {
-        if (s_entries[i].offset == (int)offsetof(PCKeybindings, minimap)) continue;
+        if (kb_is_pc_action(s_entries[i].offset)) continue;
         if (*(PCInputCode*)((char*)&g_pc_keybindings + s_entries[i].offset) == code) return 1;
     }
     return 0;
@@ -317,7 +330,7 @@ static int kb_code_used_by_game(PCInputCode code) {
 
 static int pad_code_used_by_game(PCPadCode code) {
     for (int i = 0; i < (int)NUM_PAD_ENTRIES; i++) {
-        if (s_pad_entries[i].offset == (int)offsetof(PCPadBindings, minimap)) continue;
+        if (pad_is_pc_action(s_pad_entries[i].offset)) continue;
         if (*(PCPadCode*)((char*)&g_pc_padbindings + s_pad_entries[i].offset) == code) return 1;
     }
     return 0;
@@ -327,25 +340,37 @@ static int pad_code_used_by_game(PCPadCode code) {
  * already use its default (early builds had L on LB). The GameCube action
  * keeps the key; Minimap moves to a free key, or is unbound on the pad.
  * Returns 1 if a binding changed. */
-static int resolve_minimap_conflicts(void) {
+static int resolve_pc_action_conflicts(void) {
     static const PCInputCode kb_fallbacks[] = {
-        SDL_SCANCODE_TAB, SDL_SCANCODE_M, SDL_SCANCODE_N, SDL_SCANCODE_F1, SDL_SCANCODE_F2,
+        SDL_SCANCODE_TAB, SDL_SCANCODE_C, SDL_SCANCODE_M, SDL_SCANCODE_N, SDL_SCANCODE_F1, SDL_SCANCODE_F2,
     };
+    PCInputCode* kb_actions[] = { &g_pc_keybindings.minimap, &g_pc_keybindings.freecam };
+    PCPadCode* pad_actions[] = { &g_pc_padbindings.minimap, &g_pc_padbindings.freecam };
     int changed = 0;
+    int a;
 
-    if (kb_code_used_by_game(g_pc_keybindings.minimap)) {
-        for (int i = 0; i < (int)(sizeof(kb_fallbacks) / sizeof(kb_fallbacks[0])); i++) {
-            if (!kb_code_used_by_game(kb_fallbacks[i])) {
-                g_pc_keybindings.minimap = kb_fallbacks[i];
-                changed = 1;
-                break;
+    for (a = 0; a < 2; a++) {
+        PCInputCode* code = kb_actions[a];
+        int other = *kb_actions[1 - a];
+
+        if (kb_code_used_by_game(*code) || *code == other) {
+            for (int i = 0; i < (int)(sizeof(kb_fallbacks) / sizeof(kb_fallbacks[0])); i++) {
+                if (!kb_code_used_by_game(kb_fallbacks[i]) && kb_fallbacks[i] != other) {
+                    *code = kb_fallbacks[i];
+                    changed = 1;
+                    break;
+                }
             }
         }
     }
 
-    if (g_pc_padbindings.minimap != PC_PAD_NONE && pad_code_used_by_game(g_pc_padbindings.minimap)) {
-        g_pc_padbindings.minimap = PC_PAD_NONE;
-        changed = 1;
+    for (a = 0; a < 2; a++) {
+        PCPadCode* code = pad_actions[a];
+
+        if (*code != PC_PAD_NONE && (pad_code_used_by_game(*code) || (a == 1 && *code == *pad_actions[0]))) {
+            *code = PC_PAD_NONE;
+            changed = 1;
+        }
     }
 
     return changed;
@@ -354,6 +379,8 @@ static int resolve_minimap_conflicts(void) {
 void pc_keybindings_load(void) {
     int has_minimap = 0;
     int has_pad_minimap = 0;
+    int has_freecam = 0;
+    int has_pad_freecam = 0;
 
     pc_keybindings_reset_defaults();
 
@@ -383,13 +410,15 @@ void pc_keybindings_load(void) {
             apply_keybind(key, value);
             if (strcmp(key, "Minimap") == 0) has_minimap = 1;
             if (strcmp(key, "Pad_Minimap") == 0) has_pad_minimap = 1;
+            if (strcmp(key, "FreeCam") == 0) has_freecam = 1;
+            if (strcmp(key, "Pad_FreeCam") == 0) has_pad_freecam = 1;
         }
     }
     fclose(f);
     printf("[Keybindings] Loaded %s\n", KEYBINDINGS_FILE);
 
-    /* Write back so an older file gains the Minimap lines (once). */
-    if (resolve_minimap_conflicts() || !has_minimap || !has_pad_minimap) {
+    /* Write back so an older file gains the PC action lines (once). */
+    if (resolve_pc_action_conflicts() || !has_minimap || !has_pad_minimap || !has_freecam || !has_pad_freecam) {
         pc_keybindings_save();
     }
 }

@@ -7684,6 +7684,163 @@ static void mTG_move_move(Submenu* submenu, mSM_MenuInfo_c* menu_info, mTG_tag_c
     }
 }
 
+#ifdef TARGET_PC
+/* Auto-sort: rank of an item in the sorted inventory (lower first). */
+static int mTG_pc_sort_rank(mActor_name_t item) {
+    int type;
+    int cat;
+
+    if (item == EMPTY_NO) {
+        return 99;
+    }
+    type = ITEM_NAME_GET_TYPE(item);
+    if (type == NAME_TYPE_FTR0 || type == NAME_TYPE_FTR1) {
+        return 10;
+    }
+    if (type != NAME_TYPE_ITEM1) {
+        return 20;
+    }
+    cat = ITEM_NAME_GET_CAT(item);
+    switch (cat) {
+        case ITEM1_CAT_TOOL: return 0;
+        case ITEM1_CAT_MONEY: return 1;
+        case ITEM1_CAT_PAPER: return 2;
+        case ITEM1_CAT_TICKET: return 3;
+        case ITEM1_CAT_MINIDISK: return 4;
+        case ITEM1_CAT_KABU: return 5;
+        case ITEM1_CAT_FRUIT: return 6;
+        case ITEM1_CAT_PLANT: return 7;
+        case ITEM1_CAT_FISH: return 8;
+        case ITEM1_CAT_INSECT: return 9;
+        case ITEM1_CAT_CLOTH: return 11;
+        case ITEM1_CAT_CARPET: return 12;
+        case ITEM1_CAT_WALL: return 13;
+        case ITEM1_CAT_HUKUBUKURO: return 14;
+        case ITEM1_CAT_ETC: return 15;
+        case ITEM1_CAT_DUMMY: return 16;
+        default: return 17;
+    }
+}
+
+/* Sort the pockets by category then item number, empty slots last. The
+ * per-slot data that travels with an item (condition bits, delivery quest,
+ * errand slot index) is permuted the same way. */
+static void mTG_pc_auto_sort(Submenu* submenu, mSM_MenuInfo_c* menu_info, mTG_tag_c* tag) {
+    mIV_Ovl_c* inv_ovl = submenu->overlay->inventory_ovl;
+    Private_c* priv = Now_Private;
+    int order[mPr_POCKETS_SLOT_COUNT];
+    int new_pos[mPr_POCKETS_SLOT_COUNT];
+    mActor_name_t items[mPr_POCKETS_SLOT_COUNT];
+    mQst_delivery_c deliveries[mPr_POCKETS_SLOT_COUNT];
+    u32 conds = 0;
+    int changed = FALSE;
+    int i;
+    int j;
+
+    for (i = 0; i < mPr_POCKETS_SLOT_COUNT; i++) {
+        order[i] = i;
+    }
+
+    /* stable insertion sort on (rank, item number) */
+    for (i = 1; i < mPr_POCKETS_SLOT_COUNT; i++) {
+        int cur = order[i];
+        int cur_rank = mTG_pc_sort_rank(priv->inventory.pockets[cur]);
+        mActor_name_t cur_item = priv->inventory.pockets[cur];
+
+        j = i - 1;
+        while (j >= 0) {
+            int o = order[j];
+            int o_rank = mTG_pc_sort_rank(priv->inventory.pockets[o]);
+
+            if (o_rank < cur_rank || (o_rank == cur_rank && priv->inventory.pockets[o] <= cur_item)) {
+                break;
+            }
+            order[j + 1] = o;
+            j--;
+        }
+        order[j + 1] = cur;
+    }
+
+    for (i = 0; i < mPr_POCKETS_SLOT_COUNT; i++) {
+        if (order[i] != i) {
+            changed = TRUE;
+        }
+        new_pos[order[i]] = i;
+        items[i] = priv->inventory.pockets[order[i]];
+        conds = mPr_SET_ITEM_COND(conds, i, mPr_GET_ITEM_COND(priv->inventory.item_conditions, order[i]));
+        mQst_CopyDelivery(&deliveries[i], &priv->deliveries[order[i]]);
+    }
+
+    if (!changed) {
+        sAdo_SysTrgStart(MONO(NA_SE_A));
+        return;
+    }
+
+    for (i = 0; i < mPr_POCKETS_SLOT_COUNT; i++) {
+        priv->inventory.pockets[i] = items[i];
+        mQst_CopyDelivery(&priv->deliveries[i], &deliveries[i]);
+        inv_ovl->item_scale_type[i] = mIV_ITEM_SCALE_TYPE_NONE;
+    }
+    priv->inventory.item_conditions = conds;
+
+    for (i = 0; i < mPr_ERRAND_QUEST_NUM; i++) {
+        mQst_errand_c* errand = &priv->errands[i];
+
+        if (errand->errand_type != mQst_ERRAND_TYPE_NONE && errand->pockets_idx >= 0 &&
+            errand->pockets_idx < mPr_POCKETS_SLOT_COUNT) {
+            errand->pockets_idx = new_pos[errand->pockets_idx];
+        }
+    }
+
+    mTG_mark_main_CLR(submenu, menu_info);
+    inv_ovl->selectable_item_bitfield = mSM_check_open_inventory_itemlist(menu_info->data0, menu_info->data1);
+    mTG_init_tag_data_item_win(submenu);
+    sAdo_SysTrgStart(NA_SE_45E);
+}
+
+/* Nook's sell screen: tick every sellable item at once, or untick them all
+ * when they are already all ticked. */
+static void mTG_pc_mark_all_sell(Submenu* submenu, mSM_MenuInfo_c* menu_info, mTG_tag_c* tag) {
+    mIV_Ovl_c* inv_ovl = submenu->overlay->inventory_ovl;
+    u16 before = inv_ovl->item_mark_bitfield;
+    int i;
+
+    for (i = 0; i < mPr_POCKETS_SLOT_COUNT; i++) {
+        if ((inv_ovl->selectable_item_bitfield & (1 << i)) && !mNT_check_unknown(Now_Private->inventory.pockets[i])) {
+            mTG_mark_mainX(submenu, menu_info, mTG_TABLE_ITEM, i, mTG_MARK_ON, NULL);
+        }
+    }
+
+    if (inv_ovl->item_mark_bitfield == before) {
+        if (before != 0) {
+            mTG_mark_mainX(submenu, menu_info, mTG_TABLE_ITEM, 0, mTG_MARK_CLR, NULL);
+            sAdo_SysTrgStart(NA_SE_45F);
+        } else {
+            sAdo_SysTrgStart(MONO(NA_SE_A));
+        }
+    } else {
+        sAdo_SysTrgStart(NA_SE_45E);
+    }
+
+    mTG_init_tag_data_item_win(submenu);
+}
+
+static void mTG_pc_z_proc(Submenu* submenu, mSM_MenuInfo_c* menu_info, mTG_tag_c* tag) {
+    if (menu_info->menu_type == mSM_OVL_INVENTORY && submenu->overlay->inventory_ovl != NULL &&
+        tag->table == mTG_TABLE_ITEM && mTG_check_hand_condition(submenu)) {
+        if (menu_info->data0 == mSM_IV_OPEN_NORMAL) {
+            mTG_pc_auto_sort(submenu, menu_info, tag);
+            return;
+        }
+        if (menu_info->data0 == mSM_IV_OPEN_SELL) {
+            mTG_pc_mark_all_sell(submenu, menu_info, tag);
+            return;
+        }
+    }
+    mTG_move_move(submenu, menu_info, tag);
+}
+#endif
+
 static void mTG_move_base(Submenu* submenu, mSM_MenuInfo_c* menu_info, mTG_tag_c* tag) {
     u32 trigger = submenu->overlay->menu_control.trigger;
 
@@ -7697,6 +7854,10 @@ static void mTG_move_base(Submenu* submenu, mSM_MenuInfo_c* menu_info, mTG_tag_c
         mTG_move_change(submenu, menu_info, tag);
     } else if (trigger & BUTTON_X) {
         mTG_mark_proc(submenu, menu_info, tag);
+#ifdef TARGET_PC
+    } else if (trigger & BUTTON_Z) {
+        mTG_pc_z_proc(submenu, menu_info, tag);
+#endif
     } else {
         mTG_move_move(submenu, menu_info, tag);
     }

@@ -58,6 +58,7 @@ typedef struct {
 
     /* PC actions (not GameCube buttons, never reach the game) */
     PCInputCode minimap;
+    PCInputCode freecam;
 } PCKeybindings;
 
 /* Gamepad button bindings. Sticks are hardwired to the analog sticks
@@ -76,6 +77,7 @@ typedef struct {
     PCPadCode dpad_left;
     PCPadCode dpad_right;
     PCPadCode minimap;
+    PCPadCode freecam;
 } PCPadBindings;
 
 extern PCKeybindings  g_pc_keybindings;

@@ -11,6 +11,7 @@
 #include "pc_settings_menu.h"
 #include "pc_minimap.h"
 #include "pc_car.h"
+#include "pc_freecam.h"
 #include "pc_profiler.h"
 #include "m_kankyo.h"
 
@@ -211,6 +212,10 @@ int pc_platform_poll_events(void) {
                     (int)event.key.keysym.scancode == g_pc_keybindings.minimap && pc_minimap_toggle_allowed()) {
                     pc_minimap_toggle();
                 }
+                if (!event.key.repeat && !(g_pc_keybindings.freecam & PC_INPUT_MOUSE_BIT) &&
+                    (int)event.key.keysym.scancode == g_pc_keybindings.freecam && pc_freecam_toggle_allowed()) {
+                    pc_freecam_toggle();
+                }
                 pc_typing_handle_event(&event);
                 break;
             case SDL_MOUSEBUTTONDOWN:
@@ -221,6 +226,10 @@ int pc_platform_poll_events(void) {
                 if (!g_pc_paused && (g_pc_keybindings.minimap & PC_INPUT_MOUSE_BIT) &&
                     event.button.button == (g_pc_keybindings.minimap & 0xFF) && pc_minimap_toggle_allowed()) {
                     pc_minimap_toggle();
+                }
+                if (!g_pc_paused && (g_pc_keybindings.freecam & PC_INPUT_MOUSE_BIT) &&
+                    event.button.button == (g_pc_keybindings.freecam & 0xFF) && pc_freecam_toggle_allowed()) {
+                    pc_freecam_toggle();
                 }
                 break;
             case SDL_CONTROLLERBUTTONDOWN:
@@ -238,6 +247,9 @@ int pc_platform_poll_events(void) {
                 } else if (g_pc_padbindings.minimap >= 0 && !(g_pc_padbindings.minimap & PC_PAD_AXIS_BIT) &&
                            event.cbutton.button == g_pc_padbindings.minimap && pc_minimap_toggle_allowed()) {
                     pc_minimap_toggle();
+                } else if (g_pc_padbindings.freecam >= 0 && !(g_pc_padbindings.freecam & PC_PAD_AXIS_BIT) &&
+                           event.cbutton.button == g_pc_padbindings.freecam && pc_freecam_toggle_allowed()) {
+                    pc_freecam_toggle();
                 }
                 break;
             case SDL_CONTROLLERAXISMOTION:
@@ -258,6 +270,16 @@ int pc_platform_poll_events(void) {
                         if (pc_minimap_toggle_allowed()) pc_minimap_toggle();
                     } else if (s_minimap_axis_held && event.caxis.value < 12000) {
                         s_minimap_axis_held = 0;
+                    }
+                }
+                if (g_pc_padbindings.freecam >= 0 && (g_pc_padbindings.freecam & PC_PAD_AXIS_BIT) &&
+                    event.caxis.axis == (g_pc_padbindings.freecam & 0xFF)) {
+                    static int s_freecam_axis_held = 0;
+                    if (!s_freecam_axis_held && event.caxis.value > 18000) {
+                        s_freecam_axis_held = 1;
+                        if (pc_freecam_toggle_allowed()) pc_freecam_toggle();
+                    } else if (s_freecam_axis_held && event.caxis.value < 12000) {
+                        s_freecam_axis_held = 0;
                     }
                 }
                 break;

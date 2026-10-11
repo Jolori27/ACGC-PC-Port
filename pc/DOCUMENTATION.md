@@ -306,7 +306,10 @@ Keyboard mapping:
 - **Q/E** = L/R triggers, **Z** = Z trigger
 - **F3** = toggle frame limiter
 - **F5** = debug vehicle: pops Gracie's car in front of the player in town; each further press switches to the next vehicle (three scooters), then removes it. A next to it gets in, B gets out, X honks.
-- **ESC** = quit
+- **C** (gamepad: right stick click) = free camera on/off. While it is on, the C-stick (arrow keys / right stick) orbits the camera around the player (left/right) and zooms (up = closer and lower, down = farther and higher); the game's three fixed camera presets are not stepped while it is on. Toggling it off restores the normal camera. Rebindable in Settings.
+- **Z** in the inventory (pockets page, nothing in hand) = auto-sort the pockets: tools, money, paper, tickets, music, turnips, fruit, plants, fish, insects, furniture, clothes, carpets, wallpapers, then the rest, each group by item number, empty slots last. Delivery and errand items keep their quest data.
+- **Z** in Nook's sell screen = tick every sellable item (press again when everything is ticked to untick all); then A on a ticked item offers "Sell All", exactly as with items ticked one by one with X.
+- **ESC** = pause menu: Resume, Quick Save (saves like the Gyroid's "save and continue"; only outdoors in town with no dialogue, menu or cutscene open, greyed out otherwise), Settings, Quit Game
 
 SDL2 gamepad with hotplug, analog sticks (deadzone 500), triggers, D-pad, and rumble.
 

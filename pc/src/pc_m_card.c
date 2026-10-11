@@ -291,6 +291,11 @@ static void pc_save_pre_write_side_effects(int save_mode) {
     Save_Set(travel_hard_time, lbRTC_HardTime());
 }
 
+/* TRUE once a town is loaded and the GCI can be written. */
+int pc_save_is_ready(void) {
+    return pc_save_ready;
+}
+
 static int pc_save_write_gci(void) {
     return pc_save_write_gci_to(PC_GCI_PATH, PC_GCI_TMP_PATH);
 }

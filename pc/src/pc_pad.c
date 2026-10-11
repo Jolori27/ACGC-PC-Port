@@ -51,6 +51,10 @@ BOOL PADInit(void) {
     return TRUE;
 }
 
+/* Raw C-stick for PC-side consumers (free camera). */
+s8 g_pc_cstick_x;
+s8 g_pc_cstick_y;
+
 u32 PADRead(PADStatus* status) {
     memset(status, 0, sizeof(PADStatus) * 4);
 
@@ -167,6 +171,8 @@ u32 PADRead(PADStatus* status) {
     status[0].button = buttons;
     status[0].stickX = stickX;
     status[0].stickY = stickY;
+    g_pc_cstick_x = cstickX;
+    g_pc_cstick_y = cstickY;
     status[0].substickX = cstickX;
     status[0].substickY = cstickY;
     status[0].err = 0; /* PAD_ERR_NONE */

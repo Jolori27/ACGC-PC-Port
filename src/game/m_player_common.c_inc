@@ -2321,7 +2321,13 @@ static s16 Player_actor_Get_ControllerAngle(GAME* game) {
 
 static int Player_actor_Get_DiffWorldAngleToControllerAngle(ACTOR* actorx) {
     s16 angle_y = actorx->world.angle.y;
+#ifdef TARGET_PC
+    /* The original assumes the camera always faces -180 degrees; with the
+     * free camera it does not, so use the camera-relative angle. */
+    s16 controller_y = (s16)Player_actor_Get_ControllerAngle(gamePT);
+#else
     s16 controller_y = DEG2SHORT_ANGLE2(90.0f) + Player_actor_GetController_move_angle();
+#endif
     int diff_y = (s16)(angle_y - controller_y);
 
     diff_y = diff_y < 0 ? -diff_y : diff_y;
@@ -8745,6 +8751,13 @@ static int Player_actor_check_able_change_camera_normal_index(ACTOR* actorx) {
 static void Player_actor_Set_Indoor_Camera_Index(ACTOR* actorx, GAME* game) {
     GAME_PLAY* play = (GAME_PLAY*)game;
     Camera2* camera = &play->camera;
+
+#ifdef TARGET_PC
+    /* Free camera: the C-stick orbits instead of stepping the presets. */
+    if (g_pc_freecam_on) {
+        return;
+    }
+#endif
 
     if (Player_actor_check_able_change_camera_normal_index(actorx)) {
         int dist_add_idx = camera->indoor_distance_addition_idx;

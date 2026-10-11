@@ -10,6 +10,9 @@
 #include "m_scene_table.h"
 #include "m_common_data.h"
 #include "m_field_make.h"
+#ifdef TARGET_PC
+#include "pc_freecam.h"
+#endif
 
 #if VERSION >= VER_GAFU01_00
 #define CAMERA2_STAFFROLL_CENTER_X_ROT_STEP_DIVISOR 3333
@@ -517,6 +520,19 @@ static void Camera2_Get_GoalDistanceAndDirection(GAME_PLAY* play, f32* dist, s_x
         dir->x += add_directionX_array[add_dist_idx]; // adjust by add_dist_idx since rotation on X axis should be
                                                       // defined by distance of camera
     }
+
+#ifdef TARGET_PC
+    /* Free camera: continuous orbit/zoom on top of the preset. */
+    if (main_index == CAMERA2_PROCESS_NORMAL && g_pc_freecam_on) {
+        int pitch = dir->x + pc_freecam_pitch();
+
+        *dist *= pc_freecam_zoom();
+        dir->y += pc_freecam_yaw();
+        if (pitch < DEG2SHORT_ANGLE(-172.0f)) pitch = DEG2SHORT_ANGLE(-172.0f);
+        if (pitch > DEG2SHORT_ANGLE(-96.0f)) pitch = DEG2SHORT_ANGLE(-96.0f);
+        dir->x = (s16)pitch;
+    }
+#endif
 
     if (main_index == CAMERA2_PROCESS_NORMAL || main_index == CAMERA2_PROCESS_WADE) {
         if (Camera2_InDoorCheck() == FALSE && (!mPlib_IsWadeDisabled() && (camera->flags & 1) == 0)) {

@@ -3,6 +3,7 @@
 #include "pc_settings_menu.h"
 #include "pc_menu_util.h"
 #include "pc_text_draw.h"
+#include "pc_quicksave.h"
 
 #include "m_font.h"
 #include "m_rcp.h"
@@ -27,14 +28,16 @@ typedef enum {
     PAGE_MAIN = 0,
     PAGE_SETTINGS = 1,
     PAGE_CONFIRM_QUIT = 2,
+    PAGE_SAVE_RESULT = 3,
 } PauseMenuPage;
 
-#define MAIN_ITEM_COUNT     3
+#define MAIN_ITEM_COUNT     4
 #define CONFIRM_ITEM_COUNT  2
 
 static PauseMenuPage cur_page = PAGE_MAIN;
-static int main_sel = 0;    /* 0=Resume, 1=Settings, 2=Quit Game */
+static int main_sel = 0;    /* 0=Resume, 1=Quick Save, 2=Settings, 3=Quit Game */
 static int confirm_sel = 0; /* 0=No (default), 1=Yes */
+static int save_result = PC_QUICKSAVE_OK;
 
 void pc_pause_menu_toggle(void) {
     if (!g_pc_paused && (g_pc_title_main_menu_visible || g_pc_nes_active)) return;
@@ -55,11 +58,15 @@ static void main_activate(void) {
         case 0: /* Resume */
             pc_pause_menu_toggle();
             break;
-        case 1: /* Settings */
+        case 1: /* Quick Save */
+            save_result = pc_quicksave_do();
+            cur_page = PAGE_SAVE_RESULT;
+            break;
+        case 2: /* Settings */
             cur_page = PAGE_SETTINGS;
             pc_settings_menu_enter();
             break;
-        case 2: /* Quit Game -> confirm page (default to No) */
+        case 3: /* Quit Game -> confirm page (default to No) */
             cur_page = PAGE_CONFIRM_QUIT;
             confirm_sel = 0;
             break;
@@ -123,10 +130,11 @@ static void handle_action(MenuAction act) {
             case ACT_CONFIRM:
                 if (cur_page == PAGE_MAIN)              main_activate();
                 else if (cur_page == PAGE_CONFIRM_QUIT) confirm_activate();
+                else if (cur_page == PAGE_SAVE_RESULT)  cur_page = PAGE_MAIN;
                 break;
             case ACT_CANCEL:
-                if (cur_page == PAGE_CONFIRM_QUIT) cur_page = PAGE_MAIN;
-                else                               pc_pause_menu_toggle();
+                if (cur_page == PAGE_CONFIRM_QUIT || cur_page == PAGE_SAVE_RESULT) cur_page = PAGE_MAIN;
+                else                                                                pc_pause_menu_toggle();
                 break;
             default: break;
         }
@@ -208,7 +216,8 @@ int pc_pause_menu_handle_event(const SDL_Event* e) {
 /* Drawing */
 
 static void draw_main_page(struct game_s* game) {
-    static const char* items[MAIN_ITEM_COUNT] = { "Resume", "Settings", "Quit Game" };
+    static const char* items[MAIN_ITEM_COUNT] = { "Resume", "Quick Save", "Settings", "Quit Game" };
+    int can_save = pc_quicksave_allowed();
 
     pc_menu_draw_centered(game, "- Paused -", 80.0f, 255, 255, 255, 255, 1.0f);
 
@@ -218,9 +227,36 @@ static void draw_main_page(struct game_s* game) {
         int r, g, b, a;
         int selected = (i == main_sel);
         pc_menu_row_colors(selected, &r, &g, &b, &a);
+        if (i == 1 && !can_save) {
+            /* Greyed out: saving is not possible from here. */
+            r = r * 55 / 100;
+            g = g * 55 / 100;
+            b = b * 55 / 100;
+        }
         pc_menu_draw_centered(game, items[i], y + i * line_h, r, g, b, a,
                               selected ? PC_MENU_SCALE_SELECTED : 1.0f);
     }
+}
+
+static void draw_save_result_page(struct game_s* game) {
+    const char* msg;
+
+    pc_menu_draw_centered(game, "- Quick Save -", 80.0f, 255, 255, 255, 255, 1.0f);
+    switch (save_result) {
+        case PC_QUICKSAVE_OK:
+            msg = "Game saved.";
+            break;
+        case PC_QUICKSAVE_FAILED:
+            msg = "Save failed! Check the save folder.";
+            break;
+        default:
+            msg = "Can't save here.";
+            pc_menu_draw_centered(game, "Go outside in town, close every window and try again.", 130.0f, 200, 200,
+                                  200, 255, 0.8f);
+            break;
+    }
+    pc_menu_draw_centered(game, msg, 115.0f, 230, 230, 230, 255, 1.0f);
+    pc_menu_draw_centered(game, "OK", 150.0f, 255, 255, 255, 255, PC_MENU_SCALE_SELECTED);
 }
 
 static void draw_confirm_page(struct game_s* game) {
@@ -247,6 +283,7 @@ void pc_pause_menu_draw(struct game_s* game) {
         pc_menu_dim_rect(game->graph, 180);
         if (cur_page == PAGE_MAIN)              draw_main_page(game);
         else if (cur_page == PAGE_CONFIRM_QUIT) draw_confirm_page(game);
+        else if (cur_page == PAGE_SAVE_RESULT)  draw_save_result_page(game);
     }
 
     mFont_UnSetMatrix(game->graph, mFont_MODE_FONT);

@@ -32,6 +32,7 @@
 #include "pc_settings.h"
 #include "pc_car.h"
 #include "pc_sfx.h"
+#include "pc_freecam.h"
 #endif
 
 static int l_skip_other_func_set_wade = FALSE;

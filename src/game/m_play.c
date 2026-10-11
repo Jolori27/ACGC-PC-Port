@@ -40,6 +40,8 @@
 #include "m_skin_matrix.h"
 #ifdef TARGET_PC
 #include "pc_minimap.h"
+#include "pc_freecam.h"
+#include "pc_quicksave.h"
 #endif
 #include "padmgr.h"
 #ifdef TARGET_PC
@@ -96,6 +98,9 @@ static void event_title_flag_off() {
 }
 
 static void Game_play_camera_proc(GAME_PLAY* play) {
+#ifdef TARGET_PC
+    pc_freecam_update(play);
+#endif
     Camera2_ClearActorTalking_Cull(play);
     Camera2_process(play);
 }
@@ -356,6 +361,9 @@ static void Game_play_fbdemo_proc(GAME_PLAY* play) {
 }
 
 extern void play_cleanup(GAME* game) {
+#ifdef TARGET_PC
+    g_pc_play_now = NULL;
+#endif
     GAME_PLAY* play = (GAME_PLAY*)game;
 
     mMsg_dt(game);
@@ -556,6 +564,7 @@ static void Game_play_move(GAME* game) {
 #ifdef TARGET_PC
     {
         extern int g_pc_paused;
+        g_pc_play_now = play;
         if (g_pc_paused) return;
     }
 #endif
